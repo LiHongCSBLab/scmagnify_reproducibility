@@ -154,7 +154,6 @@ dmypy.json
 *.gmx
 
 data/
-figures/
 
 # OS specifics
 **.DS_Store
