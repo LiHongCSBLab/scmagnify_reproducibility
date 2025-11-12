@@ -1,0 +1,21 @@
+defaults:
+  - _self_
+
+# General Parameters
+dataset: "cd34_multiome_benchmark"
+home: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_CD34/"
+cell: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/cell_list/cell_state_masks.csv"
+gene: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/gene_list/test_assoc_fdr1e-3_A0.3.csv"
+ref_genome: "hg38" 
+version: "250423"
+tmp_save: False
+seed: 0
+
+# Basal GRN Parameters
+# conf/magnify_chrom.yaml
+meta: "cd34_multiome_SEACells"
+span: 100000
+cor_cutoff: 0.1
+pval_cutoff: 0.1
+motif_db: "HOCOMOCOv11_HUMAN"
+motif_cutoff: 0

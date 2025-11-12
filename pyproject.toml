@@ -3,26 +3,40 @@ requires = ['setuptools', 'setuptools_scm']
 build-backend = 'setuptools.build_meta'
 
 [project]
-name = "fancypackage"
+name = "grn_tools"
 version = "0.0.0"
-description = "Fancy Package"
+description = "GRN Toolkits for scMagnify"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Jane Doe"},
+    {name = "Xufeng Chen"},
 ]
 maintainers = [
-    {name = "Jane Doe", email = "jane.doe@usa.com"},
+    {name = "Xufeng Chen", email = "chenxufeng2022@sinh.ac.cn"},
 ]
 urls.Documentation = "https://todo.com"  # TODO
-urls.Source = "https://github.com/url/to/repo.git"
-urls.Home-page = "https://github.com/url/to/repo.git"
+urls.Source = "https://github.com/LiHongCSBLab/scmagnify_reproducibility"
+urls.Home-page = "https://github.com/LiHongCSBLab/scmagnify_reproducibility"
 dependencies = [
-    "anndata>=0.12.2",
-    "dask",
-    "scanpy",
-    "zarr>3",
+    "anndata<1.10",
+    "scanpy<1.10.4",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "matplotlib",
+    "seaborn",
+    "tqdm",
+    "rich",
+    "scipy",
+    "mplscience",
+    "Pillow",
+    "psutil",
+
+    "networkx",
+    "scmagnify",
+
+
 ]
 
 [project.optional-dependencies]

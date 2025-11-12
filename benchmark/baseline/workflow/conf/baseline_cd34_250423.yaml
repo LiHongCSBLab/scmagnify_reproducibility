@@ -1,0 +1,39 @@
+
+dataset: "cd34_multiome_benchmark"
+home: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_CD34/"
+cell: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/cell_list/cell_state_masks.csv"
+gene: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/gene_list/test_assoc_fdr1e-3_A0.3.csv"
+ref-genome: "hg38" #mm10
+version: "250423"
+tmp-save: True
+seed: 0
+
+methods:
+  # - name: "CellOracle"
+  #   env: "celloracle"  
+  #   script: "./workflow/run_celloracle.py" 
+  # - name: "Pando"
+  #   env: "renv"
+  #   script: "./workflow/run_pando.R"
+  # - name: "FigR"
+  #   env: "renv"
+  #   script: "./workflow/run_figr.R"
+  # - name: "SCENIC"
+  #   env: "scenicplus"
+  #   script: "./workflow/run_scenic.py"
+  # - name: "SINCERITIES"
+  #   env: "renv"
+  #   script: "./workflow/run_sincerities.R"
+  # - name: "Velorama"
+  #   env: "renv"
+  #   script: "./workflow/run_velorama.sh"
+  # - name: "Dictys"
+  #   env: "dictys"
+  #   script: "./workflow/run_dictys.py"
+  # - name: "LINGER"
+  #   env: "LINGER"
+  #   script: "./workflow/run_linger.py"
+  - name: "Velorama"
+    env: "scverse2"
+    script: "./workflow/run_velorama.py"
+

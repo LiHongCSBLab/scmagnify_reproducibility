@@ -1,0 +1,37 @@
+
+dataset: "t-cell-depleted-bm_benchmark"
+home: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/"
+cell: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/benchmark/cell_list/cellrank_branch_masks.csv"
+gene: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/benchmark/gene_list/test_assoc_fdr1e-3_top2k.csv"
+ref-genome: "hg38" #mm10
+version: "test2"
+tmp-save: True
+seed: 0
+
+methods:
+  # - name: "CellOracle"
+  #   env: "celloracle"  
+  #   script: "./scripts/run_celloracle.py" 
+  # - name: "Pando"
+  #   env: "renv"
+  #   script: "./scripts/run_pando.R"
+  # - name: "FigR"
+  #   env: "renv"
+  #   script: "./scripts/run_figr.R"
+  # - name: "SCENIC"
+  #   env: "scenicplus"
+  #   script: "./scripts/run_scenic.py"
+  # - name: "SINCERITIES"
+  #   env: "renv"
+  #   script: "./scripts/run_sincerities.R"
+  # - name: "LINGER"
+  #   env: "LINGER"
+  #   script: "./scripts/run_linger.py"
+  # - name: "Velorama"
+  #   env: "renv"
+  #   script: "./scripts/run_velorama.sh"
+  # - name: "Dictys"
+  #   env: "dictys"
+  #   script: "./scripts/run_dictys_gene.py"
+
+

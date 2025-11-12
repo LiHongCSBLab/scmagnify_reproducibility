@@ -1,0 +1,14 @@
+defaults:
+  - grn_params: trail_0
+  - _self_
+
+# General Parameters
+home: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/"
+dataset: "t-cell-depleted-bm_benchmark"
+cell:  "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/benchmark/cell_list/cell_state_masks.csv"
+gene: "/home/chenxufeng/picb_cxf/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/benchmark/gene_list/test_assoc_fdr1e-3_A0.3.csv"
+version: "250423"
+tmp_save: False
+ref_genome: "hg38"
+
+

@@ -1,41 +1,95 @@
-# Single-cell analysis template repository
+# scMagnify's Reproducibility Repository
 
-This repository acts as a template notebook for the analysis of single-cell data and methods; the corresponding Jupyter
-Book is rendered [here](https://weilerp.github.io/sc_analysis_template/).
-You can check the [CellRank 2 reproducibility repository](https://github.com/theislab/cellrank2_reproducibility)
-for an example repository following the same outline as this template.
+This repository contains code, data layout, and notebooks to reproduce benchmarks and figures for the [scMagnify]().
 
-## Set up
+[![DOI](https://zenodo.org/badge/YOUR_ZENODO_BADGE.svg)](https://doi.org/10.5281/zenodo.YOUR_ZENODO_ID)
 
-1. Rename `src/fancypackage/`.
-2. Update `pyproject.toml` to include the correct information
-    - Project name
-    - Project description
-    - Project-specific Python requirements
-    - Project author
-    - Project maintainers
-    - Project URLs
-3. Update `src/fancypackage/core/_constants.py` to include any paths relevant to your analysis and that should be accessible from any script or Jupyter notebook
-4. Update this README to include the relevant information about your project.
-5. Ensure repository settings are set up correctly to build Jupyter Book:
-    - In `Settings > Actions > General > Workflow permissions`: Allow read and write permissions.
-    - In `Settings > Pages > Build and deployment`: Set the branch to `gh-pages`.
+This repository accompanies the preprint [**_Decomposing multi-scale dynamic regulatory from single-cell multiomics with scMagnify_**](https://www.biorxiv.org/content/YOUR_BIORXIV_LINK) (Chen\*, ..., et al., bioRxiv, 2025).
+
+-   The repository is on GitHub [here](https://github.com/YOUR_LAB/scMagnify-paper)
+-   This repository contains all code used to benchmark `scMagnify` and generate the figures in the manuscript.
+-   Jump to the [Code to produce figures](#code-to-produce-the-figures) section for links to the specific notebooks for each figure panel.
 
 ## Installation
 
+- Python >= 3.10
+- Install dependencies from pyproject.toml, e.g. with pip, If you don't have Python installed, we recommend installing [uv](https://github.com/astral-sh/uv).
 ```bash
-conda create -n fancyname-pyXX python=X.X --yes && conda activate fancyname-pyXX
-pip install -e ".[dev,jupyter]"
-pre-commit install
-
-python -m ipykernel install --user --name fancyname-pyXX --display-name "fancyname-pyXX"
+uv pip install git+https://github.com/LiHongCSBLab/scMagnify.git@main
 ```
 
-## Things to keep in mind
+## Quick start
 
-Whenever you use a new single-cell tool, add it to `known_bio` in `pyproject.toml` s.t. `isort` can work correctly.
+- Re-run simulations/benchmarks:
+  - benchmark/simulation/* for scMultiSim evaluations
+  - benchmark/baseline/* for baseline method runs
+  - benchmark/scmagnify_multirun/* for multi-run configs/outputs
+- Re-generate figures: see figures/Fig2–Fig6 assets and companion notebooks.
 
-## Workflow
+Programmatic API (src/grn_tools):
+- from grn_tools import GRNEvaluator
+- evaluator = GRNEvaluator(); evaluator.load_grns(...); evaluator.load_groundtruths(...)
+- evaluator.calculate_accuracy(); evaluator.plot_performance_curves('pr'|'roc', group_by='Dataset'|'Lineage')
 
-The workflow for committing a notebook is as follows: Upon committing a notebook, the pre-commit hooks format your notebook
-and generate a corresponding script. You need to add the formatted notebook and Python script to the same commit for the commit to go through. The commit will now either be successful or not. If not, your Python script was formatted by the pre-commit hooks. In that case, you need to update your notebook accordingly, unstage the Python script, and recommit the notebook. You will iterate through this process until there are no inconsistencies between the notebook and its corresponding Python script.
+## Repository structure
+
+- benchmark/
+  - baseline/: scripts to run baseline GRN methods for comparison
+  - scmagnify_multirun/: hydra-based multi-run configs/outputs for scMagnify
+  - simulation/: notebooks and scripts for scMultiSim-based simulations and evaluation
+  - figures/, results/: aggregated outputs from benchmarks
+- data/: input data stubs and dataset folders (large files hosted externally)
+- figures/: figure-specific assets (Fig2–Fig6)
+- notebooks/: jupyter-book scaffolding and templates
+- scripts/: small helper scripts/templates
+- src/grn_tools/: evaluation utilities
+  - GRNEvaluator.py: end-to-end GRN evaluation workflow
+  - _acc_metrics.py: AUPR/AUROC/F-score/EPR and batch evaluators
+  - _stab_metrics.py: Jaccard/Cosine stability metrics and plotting
+  - _plotting.py: plotting helpers (bar/violin/line/heatmaps)
+  - _utils.py: small helpers (matrix-to-edge, image merge, etc.)
+  - _constants.py: dataset paths, palettes, and ground-truth maps
+
+## Codebase
+
+This repository is meant to enhance the Materials & Methods section by providing code for all analyses in the manuscript, in order to improve reproducibility for the main results.
+
+-   `scMagnify-benchmark` --> All scripts and notebooks for benchmarking and simulation.
+    -   [`baseline`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-benchmark/baseline) --> Scripts for running baseline GRN inference methods (SCENIC, CellOracle, Velorama, etc.) for comparison.
+    -   [`magnify_multirun`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-benchmark/magnify_multirun) --> `hydra`-based scripts for executing `scMagnify` inference across different datasets and parameters (`conf`, `multirun`, `outputs`).
+    -   [`simulation`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-benchmark/simulation) --> Jupyter notebooks for generating simulated data and evaluating the performance of `scMagnify` against baseline methods.
+-   `scMagnify-figures` --> Jupyter notebooks organized by figure number, used to generate all main and supplementary figures in the manuscript.
+    -   [`Fig2`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-figures/Fig2) --> Notebooks for data preprocessing and TF binding/driver analysis.
+    -   [`Fig3`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-figures/Fig3) --> Notebooks for analyzing regulatory dynamics and time lags.
+    -   [`Fig4`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-figures/Fig4) --> Notebooks for RegFactor decomposition (NaiveB lineage).
+    -   [`Fig5`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-figures/Fig5) --> Notebooks for differential RegFactor analysis (Alpha vs. Beta lineage).
+    -   [`Fig6`](https://github.com/YOUR_LAB/scMagnify-paper/tree/main/scMagnify-figures/Fig6) --> Notebooks for intracellular communication (L-R to TF) analysis.
+
+## Code to produce the figures
+
+This table contains pointers to the key notebooks associated with each figure.
+
+| Figure | Analysis | Path |
+| :--- | :--- | :--- |
+| Fig 1 / S1 | Simulation & Benchmark Evaluation | [`scMagnify-benchmark/simulation/06_scMultiSim_evaluate.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-benchmark/simulation/06_scMultiSim_evaluate.ipynb) |
+| Fig 2a | Data Object Preparation | [`scMagnify-figures/Fig2/00_data_object.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig2/00_data_object.ipynb) |
+| Fig 2b / S2 | TF Binding Accuracy (Cistrome) | [`scMagnify-figures/Fig2/01_tf_binding_accuracy-Cistrome.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig2/01_tf_binding_accuracy-Cistrome.ipynb) |
+| Fig 2c / S3 | Driver TF Recovery | [`scMagnify-figures/Fig2/02_driver_tf_recovery.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig2/02_driver_tf_recovery.ipynb) |
+| Fig 3a | GData Object (Inference) | [`scMagnify-figures/Fig3/00_gdata_object.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig3/00_gdata_object.ipynb) |
+| Fig 3b | Regulatory Specificity | [`scMagnify-figures/Fig3/01_reg_spec.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig3/01_reg_spec.ipynb) |
+| Fig 3c | Regulatory Dynamics | [`scMagnify-figures/Fig3/02_reg_dyn.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig3/02_reg_dyn.ipynb) |
+| Fig 4 | RegFactor Analysis (NaiveB) | [`scMagnify-figures/Fig4/01_regfactor_analysis_NaiveB.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig4/01_regfactor_analysis_NaiveB.ipynb) |
+| Fig 5a | Differential RegFactor Analysis | [`scMagnify-figures/Fig5/01_reg_diff.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig5/01_reg_diff.ipynb) |
+| Fig 5b,c | RegFactor Analysis (Alpha/Beta) | [`scMagnify-figures/Fig5/02_regfactor_analysis_Alpha.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig5/02_regfactor_analysis_Alpha.ipynb) |
+| Fig 6a | Intracellular CCI | [`scMagnify-figures/Fig6/02_intracellular_cci.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig6/02_intracellular_cci.ipynb) |
+| Fig 6b | Comm. Module Analysis | [`scMagnify-figures/Fig6/test-intracellular_comm_cci.ipynb`](https://github.com/YOUR_LAB/scMagnify-paper/blob/main/scMagnify-figures/Fig6/test-intracellular_comm_cci.ipynb) |
+
+## Data availability
+
+All data objects (`.h5ad`, `.h5mu`) used for the analyses are available on Zenodo: [https://doi.org/10.5281/zenodo.YOUR_ZENODO_ID](https://doi.org/10.5281/zenodo.YOUR_ZENODO_ID).
+
+## Citation
+
+If you use this data or code, please cite:
+
+_Decomposing multi-scale dynamic regulatory from single-cell multiomics with scMagnify_. Chen\*, ..., et al., bioRxiv 2025; doi: [https://doi.org/10.1101/YOUR_BIORXIV_ID](https://doi.org/10.1101/YOUR_BIORXIV_ID)
