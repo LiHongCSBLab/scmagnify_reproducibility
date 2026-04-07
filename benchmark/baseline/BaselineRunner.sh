@@ -1,11 +1,14 @@
 #!/bin/bash
 
-# Load YAML configuration file
-# Input CONFIG_FILE
-# CONFIG_FILE="/home/chenxufeng/WorkSpace/scMagnify/scMagnify-benchmark//baseline/workflow/conf/baseline_tcell_250423.yaml"
 CONFIG_FILE="$1"
 if [ -z "$CONFIG_FILE" ]; then
     echo "Usage: $0 <path_to_config_file>"
+    exit 1
+fi
+
+TIME_BIN="${TIME_BIN:-/usr/bin/time}"
+if [ ! -x "$TIME_BIN" ]; then
+    echo "Profiler binary not found or not executable: $TIME_BIN"
     exit 1
 fi
 
@@ -48,6 +51,7 @@ mkdir -p "$FIG_DIR"
 for METHOD_NAME in "${METHODS[@]}"; do
     METHOD_ENV=${METHOD_ENVS["$METHOD_NAME"]}
     METHOD_SCRIPT=${METHOD_SCRIPTS["$METHOD_NAME"]}
+    METHOD_LOG="$LOG_DIR/$METHOD_NAME.log"
 
     echo "Running method: $METHOD_NAME..."
 
@@ -58,24 +62,24 @@ for METHOD_NAME in "${METHODS[@]}"; do
         exit 1
     fi
 
-    # Determine script type and run the script
     script_ext="${METHOD_SCRIPT##*.}"
-    touch "$LOG_DIR/$METHOD_NAME.log"  # Create log file if it doesn't exist
+    : > "$METHOD_LOG"
+
     case $script_ext in
         R)
             echo "Running R script: $METHOD_SCRIPT"
-            Rscript "$METHOD_SCRIPT" --home "$HOME_DIR" --dataset "$DATASET_KEY" --cell "$CELL_LIST" --gene "$GENE_LIST" --version "$VERSION" --tmp-save "$TMP_SAVE" --seed "$SEED" --ref-genome "$REF_GENOME" 2>&1 | tee "$LOG_DIR/$METHOD_NAME.log"
+            "$TIME_BIN" -v Rscript "$METHOD_SCRIPT" --home "$HOME_DIR" --dataset "$DATASET_KEY" --cell "$CELL_LIST" --gene "$GENE_LIST" --version "$VERSION" --tmp-save "$TMP_SAVE" --seed "$SEED" --ref-genome "$REF_GENOME" 2>&1 | tee "$METHOD_LOG"
             ;;
         py)
             echo "Running Python script: $METHOD_SCRIPT"
-            python "$METHOD_SCRIPT" --home "$HOME_DIR" --dataset "$DATASET_KEY" --cell "$CELL_LIST" --gene "$GENE_LIST" --version "$VERSION" --tmp-save "$TMP_SAVE" --seed "$SEED" --ref-genome "$REF_GENOME" 2>&1 | tee "$LOG_DIR/$METHOD_NAME.log"
+            "$TIME_BIN" -v python "$METHOD_SCRIPT" --home "$HOME_DIR" --dataset "$DATASET_KEY" --cell "$CELL_LIST" --gene "$GENE_LIST" --version "$VERSION" --tmp-save "$TMP_SAVE" --seed "$SEED" --ref-genome "$REF_GENOME" 2>&1 | tee "$METHOD_LOG"
             ;;
         sh)
             echo "Running Shell script: $METHOD_SCRIPT"
-            bash "$METHOD_SCRIPT" "$HOME_DIR" "$DATASET_KEY" "$CELL_LIST" "$GENE_LIST" "$VERSION" "$TMP_SAVE" "$SEED" "$REF_GENOME" 2>&1 | tee "$LOG_DIR/$METHOD_NAME.log"
+            "$TIME_BIN" -v bash "$METHOD_SCRIPT" "$HOME_DIR" "$DATASET_KEY" "$CELL_LIST" "$GENE_LIST" "$VERSION" "$TMP_SAVE" "$SEED" "$REF_GENOME" 2>&1 | tee "$METHOD_LOG"
             ;;
         *)
-            echo "Unsupported script type: $script_ext" 
+            echo "Unsupported script type: $script_ext"
             exit 1
             ;;
     esac
@@ -83,12 +87,3 @@ for METHOD_NAME in "${METHODS[@]}"; do
     # Deactivate Conda environment
     conda deactivate
 done
-
-
-
-
-
-
-
-
-
