@@ -1,0 +1,89 @@
+
+dataset: "cd34_multiome_benchmark"
+home: "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/"
+cell: "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/cell_list/cell_state_masks.csv"
+gene: "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/gene_list/test_assoc_fdr1e-3_A0.3.csv"
+ref-genome: "hg38" #mm10
+version: "260411"
+tmp-save: True
+seed: 0
+
+methods:
+
+  # - name: "CellOracle"
+  #   env: "celloracle"
+  #   script: "./workflow/run_celloracle.py"
+
+  # - name: "Pando"
+  #   env: "renv"
+  #   script: "./workflow/run_pando.R"
+
+  # - name: "FigR"
+  #   env: "renv"
+  #   script: "./workflow/run_figr.R"
+
+  # - name: "SCENIC"
+  #   env: "scenicplus"
+  #   script: "./workflow/run_scenic.py"
+  #
+  # - name: "SINCERITIES"
+  #   env: "renv"
+  #   script: "./workflow/run_sincerities.R"
+
+  # - name: "LINGER"
+  #   env: "LINGER"
+  #   script: "./workflow/run_linger.py"
+
+  # - name: "Dictys"
+  #   env: "dictys"
+  #   script: "./workflow/run_dictys.py"
+  #
+  # - name: "Velorama"
+  #   env: "scverse2"
+  #   script: "./workflow/run_velorama.py"
+
+  # - name: "DictysFragments"
+  #   env: "dictys"
+  #   script: "./workflow/run_dictys_fragments_resume.py"
+  #   args:
+  #     - "--fragments"
+  #     - "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/0_cellranger/CD34_BM_Rep1_multiome.fragments.tsv.gz"
+  #     - "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/0_cellranger/CD34_BM_Rep2_multiome.fragments.tsv.gz"
+  #     - "--fragment-samples"
+  #     - "CD34_BM_Rep1_multiome"
+  #     - "CD34_BM_Rep2_multiome"
+  #     - "--resume"
+  #     - "true"
+  #     - "--resume-mode"
+  #     - "stage"
+  #     - "--device"
+  #     - "cuda:0"
+  #     - "--threads"
+  #     - "16"
+
+  - name: "SCENICPLUSResume"
+    env: "scenicplus"
+    script: "./workflow/run_scenicplus_resume.py"
+    args:
+      - "--region-set-root"
+      - "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/data/scenicplus_region_sets/cd34_multiome_benchmark"
+      - "--region-set-mode"
+      - "lineage_vs_rest"
+      - "--region-fdr"
+      - "0.05"
+      - "--region-min-logfc"
+      - "0.0"
+      - "--resume"
+      - "true"
+      - "--resume-mode"
+      - "stage"
+      - "--threads"
+      - "16"
+      - "--ext"
+      - "50000"
+  # Final network is written directly from TF_to_gene output (`tg_adj.tsv`).
+  # In lineage_vs_rest mode, the script auto-generates:
+  #   <region-set-root>/<lineage>/lineage_vs_rest/lineage_vs_rest.bed
+  # Manual mode is still supported as:
+  #   <region-set-root>/<lineage>/set_01/set_01.bed
+

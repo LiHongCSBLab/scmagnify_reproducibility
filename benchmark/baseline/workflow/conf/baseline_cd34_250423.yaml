@@ -8,6 +8,7 @@ version: "250423"
 tmp-save: True
 seed: 0
 
+# Optional per-method CLI flags: args: ["--threads", "16"]
 methods:
   # - name: "CellOracle"
   #   env: "celloracle"  

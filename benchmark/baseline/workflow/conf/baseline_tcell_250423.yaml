@@ -8,6 +8,8 @@ version: "250423"
 tmp-save: True
 seed: 0
 
+# Optional per-method CLI flags (list of strings), appended after the standard baseline args:
+#   args: ["--threads", "16", "--device", "cuda:0"]
 methods:
   # - name: "CellOracle"
   #   env: "celloracle"  

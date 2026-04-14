@@ -28,10 +28,11 @@ import anndata as ad
 import mudata as mu
 import numpy as np
 import pandas as pd
-import psutil
 import pyranges as pr
 import scipy.sparse as sp
 import session_info
+
+from baseline_cli_utils import log_memory_usage, run_logged_command, str2bool
 
 
 @dataclass
@@ -55,7 +56,7 @@ def parse_args() -> argparse.Namespace:
                         help="Path to gene list file (.csv)")
     parser.add_argument("-v", "--version", dest="version", type=str, required=True,
                         help="Benchmark version")
-    parser.add_argument("-t", "--tmp-save", dest="save", type=bool, default=False,
+    parser.add_argument("-t", "--tmp-save", dest="save", type=str2bool, default=False,
                         help="Temporary flag")
     parser.add_argument("-s", "--seed", dest="seed", type=int, default=0,
                         help="Random seed")
@@ -70,23 +71,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ext", dest="ext", type=int, default=250000,
                         help="Search-space extension passed to SCENIC+")
     return parser.parse_args()
-
-
-def log_memory_usage() -> None:
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    logging.info("Memory usage: %.2f MB", memory_info.rss / 1024 ** 2)
-
-
-def _run_command(cmd: list[str], *, cwd: pathlib.Path | None = None) -> None:
-    logging.info("Running command: %s", " ".join(map(str, cmd)))
-    result = subprocess.run(cmd, cwd=str(cwd) if cwd else None, text=True, capture_output=True)
-    if result.stdout:
-        logging.info(result.stdout)
-    if result.stderr:
-        logging.info(result.stderr)
-    if result.returncode != 0:
-        raise RuntimeError(f"Command failed with exit code {result.returncode}: {' '.join(map(str, cmd))}")
 
 
 def _truthy_mask(series: pd.Series) -> pd.Series:
@@ -107,26 +91,30 @@ def _resolve_input_data(home_dir: pathlib.Path, dataset: str) -> tuple[pathlib.P
 
 
 def _resolve_reference_resources(ref_genome: str, db_root: pathlib.Path | None, home_dir: pathlib.Path) -> ScenicPlusResources:
+    default_hg38_db_root = pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/human/hg38/cisTarget_db")
+    default_mm10_db_root = pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/mouse/mm10/cisTarget_db")
     if db_root is None:
         env_root = os.environ.get("SCENICPLUS_DB_ROOT")
         if env_root:
             db_root = pathlib.Path(env_root)
-        else:
-            db_root = home_dir / "benchmark" / "reference" / "scenicplus"
+        elif ref_genome == "hg38":
+            db_root = default_hg38_db_root
+        elif ref_genome == "mm10":
+            db_root = default_mm10_db_root
 
     species_map = {
         "hg38": ScenicPlusResources(
-            annotation_tsv=db_root / "hg38" / "genome" / "annotation.tsv",
-            chromsizes_tsv=db_root / "hg38" / "genome" / "chromsizes.tsv",
-            rankings_feather=db_root / "hg38" / "motif" / "human_motif_SCREEN.regions_vs_motifs.rankings.feather",
-            motif_annotation_tsv=db_root / "hg38" / "motif" / "motifs-v10nr_clust" / "nr.hgnc-m0.001-o0.0.tbl",
+            annotation_tsv=db_root / "genome_annotation.tsv",
+            chromsizes_tsv=db_root / "chromsizes.tsv",
+            rankings_feather=db_root / "hg38_screen_v10_clust.regions_vs_motifs.rankings.feather",
+            motif_annotation_tsv=db_root / "motifs-v10-nr.hgnc-m0.00001-o0.0.tbl",
             species="homo_sapiens",
         ),
         "mm10": ScenicPlusResources(
-            annotation_tsv=db_root / "mm10" / "genome" / "annotation.tsv",
-            chromsizes_tsv=db_root / "mm10" / "genome" / "chromsizes.tsv",
-            rankings_feather=db_root / "mm10" / "motif" / "mouse_motif_SCREEN.regions_vs_motifs.rankings.feather",
-            motif_annotation_tsv=db_root / "mm10" / "motif" / "motifs-v10nr_clust" / "nr.mgi-m0.001-o0.0.tbl",
+            annotation_tsv=db_root / "genome_annotation.tsv",
+            chromsizes_tsv=db_root / "chromsizes.tsv",
+            rankings_feather=db_root / "mm10_screen_v10_clust.regions_vs_motifs.rankings.feather",
+            motif_annotation_tsv=db_root / "motifs-v10nr_clust-nr.mgi-m0.001-o0.0.tbl",
             species="mus_musculus",
         ),
     }
@@ -365,7 +353,7 @@ def main(args: argparse.Namespace) -> None:
             if not region_set_dir.exists():
                 raise FileNotFoundError(f"Region set directory does not exist for lineage {lin}: {region_set_dir}")
 
-            _run_command([
+            run_logged_command([
                 "scenicplus", "prepare_data", search_space_subcommand,
                 "--multiome_mudata_fname", str(prepared_mdata_path),
                 "--gene_annotation_fname", str(resources.annotation_tsv),
@@ -375,7 +363,7 @@ def main(args: argparse.Namespace) -> None:
                 "--out_fname", str(lin_dir / "space.tsv"),
             ])
 
-            _run_command([
+            run_logged_command([
                 "scenicplus", "grn_inference", "region_to_gene",
                 "--multiome_mudata_fname", str(prepared_mdata_path),
                 "--search_space_fname", str(lin_dir / "space.tsv"),
@@ -387,7 +375,7 @@ def main(args: argparse.Namespace) -> None:
             p2g_df = _format_region_to_gene_output(lin_dir / "rg_adj.tsv")
             p2g_df.to_csv(lin_dir / "p2g.csv", index=False)
 
-            _run_command([
+            run_logged_command([
                 "scenicplus", "grn_inference", "motif_enrichment_cistarget",
                 "--region_set_folder", str(region_set_dir),
                 "--cistarget_db_fname", str(resources.rankings_feather),
@@ -399,7 +387,7 @@ def main(args: argparse.Namespace) -> None:
                 "--n_cpu", str(args.threads),
             ])
 
-            _run_command([
+            run_logged_command([
                 "scenicplus", "prepare_data", "prepare_menr",
                 "--paths_to_motif_enrichment_results", str(lin_dir / "cistarget.hdf5"),
                 "--multiome_mudata_fname", str(prepared_mdata_path),
@@ -413,7 +401,7 @@ def main(args: argparse.Namespace) -> None:
             tfb_df = _derive_tfb_from_direct_h5ad(prepared_mdata_path, p2g_df, lin_dir / "direct.h5ad")
             tfb_df.to_csv(lin_dir / "tfb.csv", index=False)
 
-            _run_command([
+            run_logged_command([
                 "scenicplus", "grn_inference", "TF_to_gene",
                 "--multiome_mudata_fname", str(prepared_mdata_path),
                 "--tf_names", str(lin_dir / "tfs.txt"),
@@ -436,7 +424,7 @@ def main(args: argparse.Namespace) -> None:
             ]
             if p2g_df.shape[0] > 0 and not (p2g_df["score"] < 0).any():
                 egrn_cmd.extend(["--do_not_rho_dichotomize_r2g", "--do_not_rho_dichotomize_eRegulon"])
-            _run_command(egrn_cmd)
+            run_logged_command(egrn_cmd)
 
             edge_df = _format_egrn_output(lin_dir / "egrn.tsv")
             out_csv = net_dir / f"SCENICPLUS_{lin}.csv"

@@ -8,6 +8,7 @@ import argparse
 import gzip
 import logging
 import os
+import re
 import pathlib
 import shutil
 import subprocess
@@ -20,9 +21,10 @@ import dictys
 import mudata as mu
 import numpy as np
 import pandas as pd
-import psutil
 import scipy.sparse as sp
 import session_info
+
+from baseline_cli_utils import log_memory_usage, run_logged_command, str2bool
 
 
 @dataclass(frozen=True)
@@ -104,17 +106,6 @@ QUAL = "F" * SEQLEN
 COMMON_SAMPLE_SEPARATORS = ["#", "_", "|", ":", "/"]
 
 
-def str2bool(value: str | bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    lowered = str(value).strip().lower()
-    if lowered in {"true", "1", "yes", "y"}:
-        return True
-    if lowered in {"false", "0", "no", "n"}:
-        return False
-    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Dictys from fragment files")
     parser.add_argument("-d", "--dataset", dest="dataset", type=str, required=True,
@@ -161,23 +152,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gene-bed", dest="gene_bed", type=pathlib.Path, default=None,
                         help="Optional gene annotation BED used by Dictys")
     return parser.parse_args()
-
-
-def log_memory_usage() -> None:
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    logging.info("Memory usage: %.2f MB", memory_info.rss / 1024 ** 2)
-
-
-def _run_command(cmd: list[str], *, cwd: pathlib.Path | None = None) -> None:
-    logging.info("Running command: %s", " ".join(map(str, cmd)))
-    result = subprocess.run(cmd, cwd=str(cwd) if cwd else None, text=True, capture_output=True)
-    if result.stdout:
-        logging.info(result.stdout)
-    if result.stderr:
-        logging.info(result.stderr)
-    if result.returncode != 0:
-        raise RuntimeError(f"Command failed with exit code {result.returncode}: {' '.join(map(str, cmd))}")
 
 
 def _resolve_input_data(home_dir: pathlib.Path, dataset: str) -> tuple[pathlib.Path, str]:
@@ -287,14 +261,14 @@ def _prepare_preprocessed_mdata(lineage_mdata: mu.MuData, work_dir: pathlib.Path
 
 def _resolve_resources(args: argparse.Namespace) -> DictysResources:
     if args.refGenome == "hg38":
-        homer_genome = args.homer_genome or pathlib.Path("/home/chenxufeng/picb_cxf/Ref/human/hg38/homer_genome")
-        motifs = args.motifs or pathlib.Path("/home/chenxufeng/picb_cxf/Database/motif_databases/HOCOMOCOv11_full_HUMAN_mono_homer_format_0.0001.motif")
-        gene_bed = args.gene_bed or pathlib.Path("/home/chenxufeng/picb_cxf/Ref/human/hg38/annotations/ucsc/gene.bed")
+        homer_genome = args.homer_genome or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/human/hg38/homer_genome")
+        motifs = args.motifs or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Database/motif_databases/HOCOMOCO/HOCOMOCOv11_full_HUMAN_mono_homer_format_0.0001.motif")
+        gene_bed = args.gene_bed or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/human/hg38/annotations/ucsc/gene.bed")
         chrom_sizes = HG38_CHROM_SIZES
     elif args.refGenome == "mm10":
-        homer_genome = args.homer_genome or pathlib.Path("/home/chenxufeng/picb_cxf/Ref/mouse/mm10/homer_genome")
-        motifs = args.motifs or pathlib.Path("/home/chenxufeng/picb_cxf/Database/motif_databases/HOCOMOCOv11_full_MOUSE_mono_homer_format_0.0001.motif")
-        gene_bed = args.gene_bed or pathlib.Path("/home/chenxufeng/picb_cxf/Ref/mouse/mm10/annotations/ucsc/gene.bed")
+        homer_genome = args.homer_genome or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/mouse/mm10/homer_genome")
+        motifs = args.motifs or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Database/motif_databases/HOCOMOCO/HOCOMOCOv11_full_MOUSE_mono_homer_format_0.0001.motif")
+        gene_bed = args.gene_bed or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/mouse/mm10/annotations/ucsc/gene.bed")
         chrom_sizes = MM10_CHROM_SIZES
     else:
         raise ValueError(f"Unsupported reference genome: {args.refGenome}")
@@ -447,6 +421,49 @@ def _resolve_obs_name(
     return obs_lookup.get((None, raw_barcode))
 
 
+def _p2g_cre_to_bed_rows(cre_series: pd.Series) -> pd.DataFrame:
+    """Turn CRE strings from _build_p2g into BED rows.
+
+    ``cre`` is ``region`` with only the first ':' replaced by '-' (see _build_p2g). Dictys may emit
+    ``chrom:start-end`` or ``chrom:start:end``; after that step the suffix is ``start-end`` or
+    ``start:end`` respectively.
+    """
+    coord_pair = re.compile(r"^(\d+)\s*[-:]\s*(\d+)$")
+    rows: list[tuple[str, int, int]] = []
+    for cre in cre_series.drop_duplicates().astype(str):
+        first_dash = cre.find("-")
+        if first_dash < 0:
+            raise ValueError(f"Invalid CRE (no hyphen): {cre!r}")
+        chrom, tail = cre[:first_dash], cre[first_dash + 1 :].strip()
+        m = coord_pair.fullmatch(tail)
+        if m is None:
+            raise ValueError(
+                f"Invalid CRE (expected 'start-end' or 'start:end' after chrom): {cre!r}"
+            )
+        rows.append((chrom, int(m.group(1)), int(m.group(2))))
+    return pd.DataFrame(rows, columns=["chr", "start", "end"])
+
+
+def _canonical_mdl_peak_loc(cre: str) -> str:
+    """Normalize CRE strings so p2g and tfb peaks use the same ``loc`` key.
+
+    Dictys ``chromatin tssdist`` expects peak names in ``chr:start:end`` format. Upstream
+    p2g/tfb intermediates can mix ``chr-start:end`` and ``chr-start-end``. Parse
+    chrom/start/end like :func:`_p2g_cre_to_bed_rows`, then normalize to the format expected
+    by Dictys MDL subcommands.
+    """
+    cre = str(cre).strip()
+    first_dash = cre.find("-")
+    if first_dash < 0:
+        return cre
+    chrom, tail = cre[:first_dash], cre[first_dash + 1 :].strip()
+    coord_pair = re.compile(r"^(\d+)\s*[-:]\s*(\d+)$")
+    m = coord_pair.fullmatch(tail)
+    if m is None:
+        return cre.replace("-", ":", 1)
+    return f"{chrom}:{m.group(1)}:{m.group(2)}"
+
+
 def _write_peaks_bed(atac_var_names: pd.Index, path: pathlib.Path) -> None:
     peaks = pd.Index(atac_var_names.astype(str)).str.replace(":", "-", regex=False)
     peak_df = peaks.str.split("-", expand=True)
@@ -474,7 +491,7 @@ def _build_p2g(prepared_mdata_path: pathlib.Path, output_path: pathlib.Path, tem
     pd.DataFrame({"placeholder": np.zeros(peaks.size)}, index=peaks).to_csv(peaks_path, sep="\t", compression="gzip")
 
     dist_path = temp_dir / "p2g_tssdist.tsv.gz"
-    _run_command([
+    run_logged_command([
         "python", "-m", "dictys", "chromatin", "tssdist",
         "--cut", str(distance),
         str(expr_path), str(peaks_path), str(gene_bed), str(dist_path),
@@ -567,7 +584,7 @@ def _fragments_to_bam(
     if not matched_any:
         raise ValueError("No selected cells matched the provided fragment barcodes")
 
-    _run_command(["samtools", "index", str(bam_path), str(bai_path)])
+    run_logged_command(["samtools", "index", str(bam_path), str(bai_path)])
     return pd.DataFrame(stats_rows)
 
 
@@ -599,8 +616,7 @@ def _build_tfb(
     if p2g_df.empty:
         _write_peaks_bed(mdata.mod["atac"].var_names, peaks_bed)
     else:
-        peak_df = p2g_df["cre"].drop_duplicates().str.split("-", expand=True)
-        peak_df.columns = ["chr", "start", "end"]
+        peak_df = _p2g_cre_to_bed_rows(p2g_df["cre"])
         peak_df["start"] = peak_df["start"].astype(int)
         peak_df["end"] = peak_df["end"].astype(int)
         peak_df = peak_df[(peak_df["end"] - peak_df["start"]) >= 100].sort_values(["chr", "start", "end"])
@@ -617,9 +633,9 @@ def _build_tfb(
     )
     qc_df.to_csv(lineage_dir / "barcode_match_qc.csv", index=False)
 
-    _run_command(["python", "-m", "dictys", "chromatin", "wellington", str(bam_path), str(bai_path), str(peaks_bed), str(foot_path), "--nth", str(threads)])
-    _run_command(["python", "-m", "dictys", "chromatin", "homer", str(foot_path), str(resources.motifs), str(resources.homer_genome), str(expr_path), str(motif_path), str(well_path), str(homer_path)])
-    _run_command(["python", "-m", "dictys", "chromatin", "binding", str(well_path), str(homer_path), str(bind_path)])
+    run_logged_command(["python", "-m", "dictys", "chromatin", "wellington", str(bam_path), str(bai_path), str(peaks_bed), str(foot_path), "--nth", str(threads)])
+    run_logged_command(["python", "-m", "dictys", "chromatin", "homer", str(foot_path), str(resources.motifs), str(resources.homer_genome), str(expr_path), str(motif_path), str(well_path), str(homer_path)])
+    run_logged_command(["python", "-m", "dictys", "chromatin", "binding", str(well_path), str(homer_path), str(bind_path)])
 
     intersect_cmd = (
         f"zcat {bind_path} | "
@@ -628,7 +644,7 @@ def _build_tfb(
         "awk 'BEGIN {FS=\"\\t\"; OFS=\"\\t\"} {print $1, $2, $3, $7, $8}' > "
         f"{tfb_bed}"
     )
-    _run_command(["bash", "-lc", intersect_cmd])
+    run_logged_command(["bash", "-lc", intersect_cmd])
 
     if tfb_bed.exists() and tfb_bed.stat().st_size > 0:
         tfb = pd.read_csv(tfb_bed, sep="\t", header=None, names=["chr", "start", "end", "tf", "score"])
@@ -651,14 +667,21 @@ def _prepare_mdl_inputs(prepared_mdata_path: pathlib.Path, p2g_df: pd.DataFrame,
     if p2g_df.empty:
         peaks = pd.Index(mdata.mod["atac"].var_names.astype(str)).str.replace("-", ":", n=1, regex=False)
     else:
-        peaks = pd.Index(p2g_df["cre"].drop_duplicates().astype(str)).str.replace("-", ":", n=1, regex=False)
+        peaks_order: list[str] = []
+        peaks_seen: set[str] = set()
+        for cre in p2g_df["cre"].drop_duplicates().astype(str):
+            loc = _canonical_mdl_peak_loc(str(cre))
+            if loc not in peaks_seen:
+                peaks_seen.add(loc)
+                peaks_order.append(loc)
+        peaks = pd.Index(peaks_order)
     pd.DataFrame({"placeholder": np.zeros(peaks.size)}, index=peaks).to_csv(peaks_path, sep="\t", compression="gzip")
 
     tfb = tfb_df.copy()
     if tfb.empty:
         tfb = pd.DataFrame(columns=["TF", "loc", "score"])
     else:
-        tfb["cre"] = tfb["cre"].astype(str).str.replace("-", ":", n=1, regex=False)
+        tfb["cre"] = tfb["cre"].map(lambda x: _canonical_mdl_peak_loc(str(x)))
         tfb = tfb[tfb["tf"].isin(mdata.mod["rna"].var_names) & tfb["cre"].isin(peaks)]
         tfb = tfb.rename(columns={"tf": "TF", "cre": "loc"})[["TF", "loc", "score"]]
     tfb.to_csv(tfb_path, sep="\t", index=False)
@@ -694,11 +717,11 @@ def _run_mdl(
     if tfb_check.empty:
         return pd.DataFrame(columns=["TF", "Target", "Score"])
 
-    _run_command(["python", "-m", "dictys", "chromatin", "tssdist", "--cut", str(distance), str(expr_path), str(peaks_path), str(gene_bed), str(tssdist_path)])
-    _run_command(["python", "-m", "dictys", "chromatin", "linking", str(tfb_path), str(tssdist_path), str(linking_path)])
-    _run_command(["python", "-m", "dictys", "chromatin", "binlinking", str(linking_path), str(binlinking_path), str(n_p2g_links)])
-    _run_command(["python", "-m", "dictys", "network", "reconstruct", "--device", device, "--nth", str(threads), str(expr_path), str(binlinking_path), str(net_weight_path), str(net_meanvar_path), str(net_covfactor_path), str(net_loss_path), str(net_stats_path)])
-    _run_command(["python", "-m", "dictys", "network", "normalize", "--nth", str(threads), str(net_weight_path), str(net_meanvar_path), str(net_covfactor_path), str(net_nweight_path)])
+    run_logged_command(["python", "-m", "dictys", "chromatin", "tssdist", "--cut", str(distance), str(expr_path), str(peaks_path), str(gene_bed), str(tssdist_path)])
+    run_logged_command(["python", "-m", "dictys", "chromatin", "linking", str(tfb_path), str(tssdist_path), str(linking_path)])
+    run_logged_command(["python", "-m", "dictys", "chromatin", "binlinking", str(linking_path), str(binlinking_path), str(n_p2g_links)])
+    run_logged_command(["python", "-m", "dictys", "network", "reconstruct", "--device", device, "--nth", str(threads), str(expr_path), str(binlinking_path), str(net_weight_path), str(net_meanvar_path), str(net_covfactor_path), str(net_loss_path), str(net_stats_path)])
+    run_logged_command(["python", "-m", "dictys", "network", "normalize", "--nth", str(threads), str(net_weight_path), str(net_meanvar_path), str(net_covfactor_path), str(net_nweight_path)])
 
     weights = pd.read_csv(net_nweight_path, sep="\t", index_col=0)
     mask = pd.read_csv(binlinking_path, sep="\t", index_col=0)
