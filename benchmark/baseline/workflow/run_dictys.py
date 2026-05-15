@@ -12,12 +12,13 @@ import pandas as pd
 import scanpy as sc
 import logging
 import session_info
-import psutil
 import re
 import subprocess
 from copy import deepcopy
 from typing import List, Optional, Union
 from tqdm.auto import tqdm
+
+from baseline_cli_utils import log_memory_usage, str2bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,7 +36,7 @@ def parse_args() -> argparse.Namespace:
                         help="Path to gene list file (.csv)")
     parser.add_argument("-v", "--version", dest="version", type=str, required=True,
                         help="Benchmark version")
-    parser.add_argument("-t", "--tmp-save", dest="tmp", type=bool, default=False,
+    parser.add_argument("-t", "--tmp-save", dest="tmp", type=str2bool, default=False,
                         help="Temporary flag")
     parser.add_argument("-s", "--seed", dest="seed", type=int, default=0,
                         help="Random seed")
@@ -96,15 +97,6 @@ def _matrix_to_edge(m: Union[np.ndarray, pd.DataFrame],
     edge = edges_df.sort_values('Score', ascending=False).reset_index(drop=True)
     
     return edge 
-
-
-def log_memory_usage():
-    """
-    Log current memory usage
-    """
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    logging.info(f"Memory usage: {memory_info.rss / 1024 ** 2:.2f} MB")
 
 
 def run_command(cmd: str, check: bool = True) -> None:

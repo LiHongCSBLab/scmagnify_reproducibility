@@ -49,6 +49,71 @@ parse_args <- function() {
     return(parser$parse_args())
 }
 
+get_rna_feature_aliases <- function(obj) {
+    features <- rownames(obj[["RNA"]])
+    aliases <- features
+
+    meta_features <- tryCatch(obj[["RNA"]]@meta.features, error = function(e) NULL)
+    if (!is.null(meta_features) && nrow(meta_features) > 0) {
+        candidate_cols <- c(
+            "gene_name", "gene", "symbol", "gene_symbol",
+            "SYMBOL", "GeneSymbol", "feature_name"
+        )
+        use_cols <- intersect(candidate_cols, colnames(meta_features))
+        for (col in use_cols) {
+            aliases <- c(aliases, as.character(meta_features[[col]]))
+        }
+    }
+
+    aliases <- aliases[!is.na(aliases) & aliases != ""]
+    unique(aliases)
+}
+
+build_mouse_motif_resources <- function(obj) {
+    data("mouse_pwms_v2")
+
+    motif_names <- names(mouse_pwms_v2@listData)
+    motif_tf <- vapply(mouse_pwms_v2@listData, function(x) x@name, character(1))
+
+    motif2tf <- data.frame(
+        motif = motif_names,
+        tf = motif_tf,
+        origin = "CIS-BP",
+        gene_id = gsub("_[[:alnum:][:punct:]]*", "", motif_names),
+        family = NA_character_,
+        name = NA_character_,
+        symbol = NA_character_,
+        motif_tf = NA_character_,
+        stringsAsFactors = FALSE
+    )
+    motif2tf <- subset(motif2tf, gene_id != "XP" & gene_id != "NP")
+
+    aliases <- get_rna_feature_aliases(obj)
+    alias_map <- data.frame(
+        alias = aliases,
+        alias_lower = tolower(aliases),
+        stringsAsFactors = FALSE
+    )
+    alias_map <- alias_map[!duplicated(alias_map$alias_lower), , drop = FALSE]
+
+    match_tf <- match(tolower(motif2tf$tf), alias_map$alias_lower)
+    match_gene_id <- match(tolower(motif2tf$gene_id), alias_map$alias_lower)
+    use_gene_id <- is.na(match_tf) & !is.na(match_gene_id)
+
+    motif2tf$tf[!is.na(match_tf)] <- alias_map$alias[match_tf[!is.na(match_tf)]]
+    motif2tf$tf[use_gene_id] <- alias_map$alias[match_gene_id[use_gene_id]]
+
+    keep <- !is.na(match_tf) | !is.na(match_gene_id)
+    motif2tf <- motif2tf[keep, , drop = FALSE]
+
+    if (nrow(motif2tf) == 0) {
+        stop("No motif TFs could be mapped to RNA features for mm10. Check RNA feature naming (symbol vs Ensembl IDs).")
+    }
+
+    motifs <- subset(mouse_pwms_v2, names(mouse_pwms_v2@listData) %in% motif2tf$motif)
+    list(motifs = motifs, motif2tf = motif2tf)
+}
+
 # log_memory_usage <- function() {
 #     memory_usage <- pryr::mem_used()
 #     loginfo(paste("Memory usage:", format(memory_usage, units = "MB")))
@@ -73,11 +138,15 @@ main <- function(args) {
     if (args$ref_genome == "hg38") {
         library(BSgenome.Hsapiens.UCSC.hg38)
         main.chroms <- standardChromosomes(BSgenome.Hsapiens.UCSC.hg38)
+        genome_ref <- BSgenome.Hsapiens.UCSC.hg38
         data('motifs')
         data('motif2tf')
         data('phastConsElements20Mammals.UCSC.hg38')
     } else if (args$ref_genome == "mm10") {
+        library(chromVARmotifs)
         library(BSgenome.Mmusculus.UCSC.mm10)
+        main.chroms <- standardChromosomes(BSgenome.Mmusculus.UCSC.mm10)
+        genome_ref <- BSgenome.Mmusculus.UCSC.mm10
     } else {
         stop("Invalid reference genome")
     }
@@ -93,9 +162,11 @@ main <- function(args) {
     loginfo(paste("Packages Version: Pando", packageVersion("Pando")))
     # log_memory_usage()
 
-    gene_selected <- read.csv(args$genelist, header = FALSE)
-    loginfo(paste("Gene list:", args$genelist))
+    gene_selected <- read.csv(args$genelist, header = FALSE, stringsAsFactors = FALSE)
     loginfo(paste("Number of genes:", nrow(gene_selected)))
+    loginfo(paste("Number of genes containing 'Rik':", sum(grepl("Rik", gene_selected[[1]]))))
+    gene_selected <- gene_selected[!grepl("Rik", gene_selected[[1]]), , drop = FALSE]
+    loginfo(paste("Number of genes after removing 'Rik':", nrow(gene_selected)))
     # log_memory_usage()
 
     cell_selected <- read.csv(args$celllist, row.names = 1)
@@ -106,6 +177,17 @@ main <- function(args) {
     ## Load data
     loginfo(paste("[1/3] Loading the data from", args$dataset))
     obj <- readRDS(file.path(args$dirPjtHome, "benchmark", "data", paste0(args$dataset, ".rds")))
+
+    if (args$ref_genome == "mm10") {
+        mouse_motifs <- build_mouse_motif_resources(obj)
+        motifs <- mouse_motifs$motifs
+        motif2tf <- mouse_motifs$motif2tf
+        loginfo(paste(
+            "Using mm10 mouse_pwms_v2 motif DB with",
+            length(motifs@listData), "motifs and",
+            nrow(motif2tf), "TF mappings matched to RNA features"
+        ))
+    }
 
     # Intersect the cell list with the obj colnames
     cell_selected <- cell_selected[rownames(cell_selected) %in% colnames(obj), ]
@@ -149,7 +231,7 @@ main <- function(args) {
             obj_lin,
             pfm = motifs,
             motif_tfs = motif2tf,
-            genome = BSgenome.Hsapiens.UCSC.hg38
+            genome = genome_ref
         ))
         step2_end_time <- Sys.time()
         loginfo(paste("Step 2: Motif scanning for", lin, "done in", step2_end_time - step2_start_time, "seconds"))

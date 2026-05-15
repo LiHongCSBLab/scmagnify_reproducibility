@@ -106,7 +106,7 @@ function(DATA,distance=1,method=1,noDIAG=0,SIGN=1){
   #h <- matrix(data=0,nrow=num_time_points-1,ncol = numGENES)
   totalDATA <- single_cell_data[[1]]
   
-  cmtest2 <- dget("/home/chenxufeng/picb_cxf/Beeline-master/SINCERITIES-R_v2.0/SINCERITIES_functions/cmtest2.R")
+  cmtest2 <- dget("/home/chenxufeng/WorkSpace/chenxufeng_scMagnify_2024/scmagnify_reproducibility/benchmark/baseline/workflow/SINCERITIES-R_v2.0/SINCERITIES_functions/cmtest2.R")
   
   for (ti in 1:(num_time_points-1)) {
     totalDATA <- rbind(totalDATA,single_cell_data[[ti+1]])

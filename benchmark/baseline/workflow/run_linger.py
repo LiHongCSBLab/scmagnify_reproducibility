@@ -3,6 +3,7 @@ LINGER: benchmark script
 """
 
 import os
+import re
 import sys
 import argparse
 import pathlib
@@ -11,9 +12,10 @@ import numpy as np
 import pandas as pd
 import logging
 import session_info
-import psutil  
 from typing import List, Optional, Union
 from copy import deepcopy
+
+from baseline_cli_utils import log_memory_usage, str2bool
 
 import scanpy as sc
 import mudata
@@ -27,6 +29,9 @@ import warnings
 warnings.simplefilter("ignore", FutureWarning)
 warnings.simplefilter("ignore", UserWarning)
 warnings.simplefilter("ignore", RuntimeWarning)
+
+MM10_PROVIDE_DATA_DIR = "/mnt/TrueNas/project/chenxufeng/Ref/LingerGRN_Ref/provide_data/"
+HG38_DATA_BULK_DIR = "/mnt/TrueNas/project/chenxufeng/Data/10x_Genomics/PBMCs_10k_scMultiome/data_bulk/"
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,12 +49,15 @@ def parse_args() -> argparse.Namespace:
                         help="Path to gene list file (.csv)")
     parser.add_argument("-v", "--version", dest="version", type=str, required=True,
                         help="Benchmark version")
-    parser.add_argument("-t", "--tmp-save", dest="save", type=bool, default=False,
+    parser.add_argument("-t", "--tmp-save", dest="save", type=str2bool, default=False,
                         help="Temporary flag")
     parser.add_argument("-s", "--seed", dest="seed", type=int, default=0,
                         help="Random seed")
     parser.add_argument("-r", "--ref-genome", dest="refGenome", type=str, default="hg38",
                         help="Reference genome")
+    parser.add_argument("--linger-provide-data", dest="lingerProvideData", type=pathlib.Path,
+                        default=pathlib.Path(MM10_PROVIDE_DATA_DIR),
+                        help="Path to LINGER provide_data directory (used for mm10 tutorial workflow)")
 
     return parser.parse_args()
 
@@ -105,15 +113,55 @@ def _matrix_to_edge(m: Union[np.ndarray, pd.DataFrame],
 
     edge = edges_df.sort_values('Score', ascending=False).reset_index(drop=True)
     
-    return edge 
-def log_memory_usage():
+    return edge
+
+
+def _with_trailing_sep(path_like: Union[str, pathlib.Path]) -> str:
+    path_str = os.fspath(path_like)
+    if path_str.endswith(os.sep):
+        return path_str
+    return path_str + os.sep
+
+
+def _pad_pseudobulk_columns(
+    tg_df: pd.DataFrame,
+    re_df: pd.DataFrame,
+    min_cols: int,
+    seed: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Log current memory usage
+    LingerGRN scNN training samples 50 backgrounds without replacement.
+    Ensure pseudo-bulk matrices have at least `min_cols` columns.
     """
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    logging.info(f"Memory usage: {memory_info.rss / 1024 ** 2:.2f} MB")
-    
+    if tg_df.shape[1] != re_df.shape[1]:
+        raise ValueError(
+            f"TG/RE pseudo-bulk column mismatch: {tg_df.shape[1]} vs {re_df.shape[1]}"
+        )
+    if tg_df.shape[1] >= min_cols:
+        return tg_df, re_df
+    if tg_df.shape[1] == 0:
+        raise ValueError("Pseudo-bulk matrices contain zero columns; cannot pad for scNN training")
+
+    rng = np.random.default_rng(seed)
+    deficit = min_cols - tg_df.shape[1]
+    sampled_cols = rng.choice(np.arange(tg_df.shape[1]), size=deficit, replace=True)
+
+    tg_extra_parts = []
+    re_extra_parts = []
+    for extra_idx, src_idx in enumerate(sampled_cols):
+        src_col = tg_df.columns[src_idx]
+        col_name = f"{src_col}__dup{extra_idx + 1}"
+        tg_part = tg_df.iloc[:, [src_idx]].copy()
+        re_part = re_df.iloc[:, [src_idx]].copy()
+        tg_part.columns = [col_name]
+        re_part.columns = [col_name]
+        tg_extra_parts.append(tg_part)
+        re_extra_parts.append(re_part)
+
+    tg_padded = pd.concat([tg_df] + tg_extra_parts, axis=1)
+    re_padded = pd.concat([re_df] + re_extra_parts, axis=1)
+    return tg_padded, re_padded
+
 
 def main(args: argparse.Namespace) -> None:
     """
@@ -159,10 +207,22 @@ def main(args: argparse.Namespace) -> None:
     
     adata_RNA = mdata.mod["RNA"]
     adata_ATAC = mdata.mod["ATAC"]
-    adata_ATAC.obs["sample"] = adata_RNA.obs["sample"].copy()
     # if "sample" in adata_RNA.obs.columns:
     #     adata_RNA.obs["sample"] = adata_RNA.obs["sample"].copy()
     #     adata_ATAC.obs["sample"] = adata_ATAC.obs["sample"].copy()
+        # 部分数据集（例如仅一个生物学样本）的 h5mu 未写入 obs["sample"]，LINGER 伪 bulk 仍依赖该列
+    if "sample" in adata_RNA.obs.columns:
+        adata_ATAC.obs["sample"] = adata_RNA.obs["sample"].copy()
+    elif "sample" in adata_ATAC.obs.columns:
+        adata_RNA.obs["sample"] = adata_ATAC.obs["sample"].copy()
+    else:
+        default_sample = str(args.dataset)
+        logging.info(
+            "obs 中无 'sample' 列，视为单一生物学样本；"
+            f"RNA/ATAC 均填入占位 sample={default_sample!r}"
+        )
+        adata_RNA.obs["sample"] = default_sample
+        adata_ATAC.obs["sample"] = default_sample
 
     # Run LINGER per cell state
     logging.info(f"[2/2] Running LINGER and saving results...")
@@ -218,21 +278,64 @@ def main(args: argparse.Namespace) -> None:
         adata_lin_ATAC = adata_lin_ATAC[:, adata_lin_ATAC.var['gene_ids'].isin(RE_pseudobulk.index)]
         pd.DataFrame(adata_lin_ATAC.var['gene_ids']).to_csv(os.path.join(lintmpSaveDir, "data", "Peaks.txt"),header=None,index=None)
         
+        # # Step 3: Training the model
+        genome = str(args.refGenome).strip().lower()
+        genome_lc = genome
+        outdir = os.path.join(lintmpSaveDir, "output/")
+        activef = "ReLU" # active function chose from 'ReLU','sigmoid','tanh'
+
+        if genome_lc == "mm10":
+            # For mm10, follow the official tutorial and use provide_data resources.
+            GRNdir = _with_trailing_sep(args.lingerProvideData)
+            method = "scNN"
+            if not os.path.isdir(GRNdir):
+                raise FileNotFoundError(
+                    f"mm10 requires a valid provide_data directory, but not found: {GRNdir}"
+                )
+            genome_map_path = os.path.join(GRNdir, "genome_map_homer.txt")
+            if not os.path.exists(genome_map_path):
+                raise FileNotFoundError(
+                    f"mm10 requires genome_map_homer.txt under provide_data, but not found: {genome_map_path}"
+                )
+        else:
+            GRNdir = HG38_DATA_BULK_DIR
+            method = "LINGER"
+
+        if genome_lc == "mm10":
+            before_cols = TG_pseudobulk.shape[1]
+            TG_pseudobulk, RE_pseudobulk = _pad_pseudobulk_columns(
+                TG_pseudobulk, RE_pseudobulk, min_cols=50, seed=args.seed
+            )
+            after_cols = TG_pseudobulk.shape[1]
+            if after_cols != before_cols:
+                logging.info(
+                    "mm10 tutorial mode: pseudo-bulk columns padded for scNN background sampling "
+                    f"({before_cols} -> {after_cols})"
+                )
+
         if args.save:
             TG_pseudobulk.to_csv(os.path.join(lintmpSaveDir, "data", "TG_pseudobulk.tsv"))
             RE_pseudobulk.to_csv(os.path.join(lintmpSaveDir, "data", "RE_pseudobulk.tsv"))
         
-        # # Step 3: Training the model
-        genome = args.refGenome
-        outdir = os.path.join(lintmpSaveDir, "output/")
-        GRNdir = "/home/chenxufeng/picb_cxf/Data/10x_Genomics/PBMCs_10k_scMultiome/data_bulk/"
-        method = "LINGER"
-        
         preprocess(TG_pseudobulk,RE_pseudobulk,GRNdir,genome,method,outdir)
         log_memory_usage()
-        
-        activef='ReLU' # active function chose from 'ReLU','sigmoid','tanh'
-        LINGER_tr.training(GRNdir,method,outdir,activef,'Human')
+
+        if genome_lc == "mm10":
+            # Tutorial path: build distance resources first, then infer species from genome_map_homer.txt
+            LINGER_tr.get_TSS(GRNdir, genome, 200000)
+            LINGER_tr.RE_TG_dis(outdir)
+
+            genomemap = pd.read_csv(os.path.join(GRNdir, "genome_map_homer.txt"), sep="\t")
+            genomemap.index = genomemap["genome_short"]
+            if genome not in genomemap.index:
+                raise ValueError(
+                    f"Genome {genome!r} is not found in {os.path.join(GRNdir, 'genome_map_homer.txt')}"
+                )
+            species = str(genomemap.loc[genome]["species_ensembl"])
+            logging.info(f"mm10 tutorial mode: GRNdir={GRNdir}, species={species}, method={method}")
+            LINGER_tr.training(GRNdir, method, outdir, activef, species)
+        else:
+            LINGER_tr.training(GRNdir, method, outdir, activef, "Human")
         log_memory_usage()
         
         # Step 4: Cell population gene regulatory network

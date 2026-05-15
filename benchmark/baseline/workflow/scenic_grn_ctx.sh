@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # 检查参数数量
 if [ "$#" -ne 2 ]; then
@@ -12,7 +13,7 @@ INPUT_DIR="$1"
 REF_GENOME="$2"
 
 # 设置数据库根目录
-DB_ROOT="/home/chenxufeng/picb_cxf/Ref"
+DB_ROOT="/mnt/TrueNas/project/chenxufeng/Ref/"
 
 # 根据参考基因组设置数据库路径
 if [ "${REF_GENOME}" == "hg38" ]; then
@@ -25,12 +26,12 @@ if [ "${REF_GENOME}" == "hg38" ]; then
   ANNOTATIONS="${DB_DIR}/motifs-v10-nr.hgnc-m0.00001-o0.0.tbl"
 elif [ "${REF_GENOME}" == "mm10" ]; then
   DB_DIR="${DB_ROOT}/mouse/mm10/cisTarget_db/"
-  ALL_TFS="${DB_DIR}/allTFs_mm10.txt"
+  ALL_TFS="${DB_DIR}/allTFs_mm.txt"
   FEATHER_1="${DB_DIR}/mm10_500bp_up_100bp_down_full_tx_v10_clust.genes_vs_motifs.scores.feather"
   FEATHER_2="${DB_DIR}/mm10_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather"
   FEATHER_3="${DB_DIR}/mm10_500bp_up_100bp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather"
   FEATHER_4="${DB_DIR}/mm10_500bp_up_100bp_down_full_tx_v10_clust.genes_vs_motifs.scores.feather"
-  ANNOTATIONS="${DB_DIR}/motifs-v10-nr.mgi-m0.00001-o0.0.tbl"
+  ANNOTATIONS="${DB_DIR}/motifs-v10nr_clust-nr.mgi-m0.001-o0.0.tbl"
 else
   echo "Unsupported reference genome: ${REF_GENOME}"
   echo "Supported reference genomes: hg38, mm10"
@@ -40,6 +41,12 @@ fi
 # 检查输入目录是否存在
 if [ ! -d "${INPUT_DIR}" ]; then
   echo "Input directory does not exist: ${INPUT_DIR}"
+  exit 1
+fi
+
+# 检查是否有 loom 输入文件
+if ! compgen -G "${INPUT_DIR}/*.loom" > /dev/null; then
+  echo "No .loom files found in input directory: ${INPUT_DIR}"
   exit 1
 fi
 
@@ -61,15 +68,19 @@ for LOOM_FILE in "${INPUT_DIR}"/*.loom; do
   fi
 
   # 运行 pyscenic grn 命令
-  pyscenic grn \
+  if ! pyscenic grn \
     --num_workers 20 \
     -o "${OUTPUT_DIR}/expr_mat.adjacencies.tsv" \
     --method grnboost2 \
     "${LOOM_FILE}" \
-    "${ALL_TFS}" 
+    "${ALL_TFS}"
+  then
+    echo "pyscenic grn failed for ${LOOM_FILE}" >&2
+    exit 1
+  fi
 
   # 运行 pyscenic ctx 命令
-  pyscenic ctx \
+  if ! pyscenic ctx \
     "${OUTPUT_DIR}/expr_mat.adjacencies.tsv" \
     "${FEATHER_1}" \
     "${FEATHER_2}" \
@@ -82,6 +93,10 @@ for LOOM_FILE in "${INPUT_DIR}"/*.loom; do
     --output "${OUTPUT_DIR}/regulons.csv" \
     --num_workers 20 \
     --mask_dropouts
+  then
+    echo "pyscenic ctx failed for ${LOOM_FILE}" >&2
+    exit 1
+  fi
 
   echo "Processing completed for ${FILENAME}. Output saved to ${OUTPUT_DIR}"
 done

@@ -87,7 +87,7 @@ preprocess <- function(df){
   return(DATA)
 }
 
-SINCERITITES <- dget("/home/chenxufeng/WorkSpace/scMagnify/scMagnify-benchmark/baseline/workflow/SINCERITIES.R")
+SINCERITITES <- dget("/home/chenxufeng/WorkSpace/chenxufeng_scMagnify_2024/scmagnify_reproducibility/benchmark/baseline/workflow/SINCERITIES.R")
 
 main <- function(args) {
     ## Configurations

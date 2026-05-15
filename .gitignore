@@ -136,6 +136,7 @@ dmypy.json
 *.csv
 *.pickle
 *.h5ad
+*.h5mu
 *.RData
 *.loom
 *.pdf

@@ -1,0 +1,401 @@
+SourceGENES,TargetGENES,Interaction,Edges
+BCL6,PRDM1,0.0541908573429678,activation/repression
+PPARD,PRDM1,0.0517229821121507,activation/repression
+PPARG,PRDM1,0.0415955499357037,activation/repression
+PRDM1,PRDM1,0.0396672788129092,activation/repression
+MAFB,PRDM1,0.0356350997188363,activation/repression
+UHRF1,PRDM1,0.0346750027331894,activation/repression
+TCFL5,PRDM1,0.0271020939193379,activation/repression
+TFPT,PRDM1,0.0254470632392663,activation/repression
+BCL6,PPARG,0.0233146538011426,activation/repression
+MYB,PRDM1,0.0233023825478676,activation/repression
+SNAI3,PRDM1,0.0225556611409595,activation/repression
+PPARD,PPARG,0.0222528398687888,activation/repression
+EGR2,PRDM1,0.0208503977977856,activation/repression
+NFATC1,PRDM1,0.0192078583299212,activation/repression
+FLI1,PRDM1,0.0188735107056015,activation/repression
+BCL6,TFPT,0.0182282000785273,activation/repression
+PPARG,PPARG,0.0178951033647718,activation/repression
+PPARD,TFPT,0.0173983136484325,activation/repression
+BCL6,TCFL5,0.0171375115932157,activation/repression
+PRDM1,PPARG,0.0170651785196354,activation/repression
+PPARD,TCFL5,0.0163572252161292,activation/repression
+IRF8,PRDM1,0.0155261461458959,activation/repression
+MAFB,PPARG,0.0153299573941313,activation/repression
+BCL6,SNAI3,0.0150757670629707,activation/repression
+UHRF1,PPARG,0.0149175639843257,activation/repression
+PPARD,SNAI3,0.0143893028023898,activation/repression
+PPARG,TFPT,0.0139935085704357,activation/repression
+BCL6,CEBPD,0.0137355244602511,activation/repression
+PRDM1,TFPT,0.0133456500268068,activation/repression
+PPARG,TCFL5,0.0131557914653233,activation/repression
+PPARD,CEBPD,0.013110628957434,activation/repression
+PRDM1,TCFL5,0.0125465736299605,activation/repression
+MAFB,TFPT,0.0119901951403182,activation/repression
+UHRF1,TFPT,0.0116658121077188,activation/repression
+TCFL5,PPARG,0.011657816641955,activation/repression
+PPARG,SNAI3,0.0115726598177732,activation/repression
+MAFB,TCFL5,0.0112721198435732,activation/repression
+PRDM1,SNAI3,0.0110365892414947,activation/repression
+UHRF1,TCFL5,0.010967355150736,activation/repression
+TFPT,PPARG,0.0109458435748522,activation/repression
+BCL6,BCL6,0.0105549694739554,activation/repression
+PPARG,CEBPD,0.0105454956773228,activation/repression
+BCL6,HOXA10,0.0102308970396837,activation/repression
+PPARD,BCL6,0.0100749654975282,activation/repression
+PRDM1,CEBPD,0.0100565876101661,activation/repression
+MYB,PPARG,0.0100313966590832,activation/repression
+MAFB,SNAI3,0.00991530763256041,activation/repression
+PPARD,HOXA10,0.00976516683350432,activation/repression
+SNAI3,PPARG,0.00971013389485638,activation/repression
+UHRF1,SNAI3,0.00964747580255927,activation/repression
+TCFL5,TFPT,0.00912058564001439,activation/repression
+BCL6,PPARD,0.00911392694213452,activation/repression
+MAFB,CEBPD,0.0090333687013913,activation/repression
+EGR2,PPARG,0.00897873378380851,activation/repression
+CEBPD,PRDM1,0.00890198817718168,activation/repression
+UHRF1,CEBPD,0.00879098984525237,activation/repression
+PPARD,PPARD,0.00869883918104081,activation/repression
+TCFL5,TCFL5,0.00857441114811113,activation/repression
+TFPT,TFPT,0.00856530760099772,activation/repression
+NFATC1,PPARG,0.00827081952881635,activation/repression
+FLI1,PPARG,0.00812696128559454,activation/repression
+PPARG,BCL6,0.00810519214426979,activation/repression
+TFPT,TCFL5,0.00805184520422143,activation/repression
+BCL6,IRF8,0.00786342658241213,activation/repression
+PPARG,HOXA10,0.00785296455749399,activation/repression
+MYB,TFPT,0.00781914152883101,activation/repression
+PRDM1,BCL6,0.00773010046284073,activation/repression
+SNAI3,TFPT,0.00756887184460067,activation/repression
+TCFL5,SNAI3,0.00754211866209886,activation/repression
+PPARD,IRF8,0.00750536522692755,activation/repression
+PRDM1,HOXA10,0.0074882695691233,activation/repression
+MYB,TCFL5,0.00735612411750354,activation/repression
+SNAI3,TCFL5,0.00712051714277217,activation/repression
+TFPT,SNAI3,0.00708205674802221,activation/repression
+PPARG,PPARD,0.00699514993353552,activation/repression
+EGR2,TFPT,0.00698691745362034,activation/repression
+MAFB,BCL6,0.00694456352460973,activation/repression
+TCFL5,CEBPD,0.00686307187149777,activation/repression
+UHRF1,BCL6,0.00675709248433959,activation/repression
+MAFB,HOXA10,0.0067256353746763,activation/repression
+IRF8,PPARG,0.0066852258998562,activation/repression
+PRDM1,PPARD,0.00667059796377429,activation/repression
+EGR2,TCFL5,0.00657504483708389,activation/repression
+UHRF1,HOXA10,0.0065460560325833,activation/repression
+BCL6,UHRF1,0.00648904620657901,activation/repression
+MYB,SNAI3,0.00647513372081435,activation/repression
+TFPT,CEBPD,0.00645093353972926,activation/repression
+NFATC1,TFPT,0.00644223702225036,activation/repression
+FLI1,TFPT,0.00632995446397107,activation/repression
+SNAI3,SNAI3,0.00626764377775711,activation/repression
+PPARD,UHRF1,0.0061936347696914,activation/repression
+BCL6,MYB,0.00611314406699115,activation/repression
+NFATC1,TCFL5,0.00606093891132333,activation/repression
+BCL6,CEBPB,0.00605867379161558,activation/repression
+PPARG,IRF8,0.00603523807284117,activation/repression
+MAFB,PPARD,0.00599209404164594,activation/repression
+FLI1,TCFL5,0.00595530535994438,activation/repression
+MYB,CEBPD,0.00591753360074176,activation/repression
+BCL6,HOXA13,0.00584610184643959,activation/repression
+PPARD,MYB,0.00583473519023995,activation/repression
+UHRF1,PPARD,0.00583115860891895,activation/repression
+HOXA10,PRDM1,0.00582336731698671,activation/repression
+EGR2,SNAI3,0.00578953703425975,activation/repression
+HOXA13,PRDM1,0.0057870383731972,activation/repression
+PPARD,CEBPB,0.00578309307916498,activation/repression
+PRDM1,IRF8,0.00575487053496703,activation/repression
+SNAI3,CEBPD,0.00572685826318647,activation/repression
+PPARD,HOXA13,0.00557993392343171,activation/repression
+NFATC1,SNAI3,0.00533551862235986,activation/repression
+TCFL5,BCL6,0.00527819680723942,activation/repression
+EGR2,CEBPD,0.00526011541763935,activation/repression
+FLI1,SNAI3,0.00524254750069097,activation/repression
+IRF8,TFPT,0.00520498371522669,activation/repression
+MAFB,IRF8,0.00516876186248953,activation/repression
+TCFL5,HOXA10,0.00510914445517443,activation/repression
+UHRF1,IRF8,0.0050307813665992,activation/repression
+PPARG,UHRF1,0.00498166673482019,activation/repression
+BCL6,NFE2L1,0.00496305305618295,activation/repression
+TFPT,BCL6,0.00496062788807528,activation/repression
+IRF8,TCFL5,0.00489752592655552,activation/repression
+NFATC1,CEBPD,0.00486773094226231,activation/repression
+TFPT,HOXA10,0.00480096684924409,activation/repression
+FLI1,CEBPD,0.00478210853965044,activation/repression
+PRDM1,UHRF1,0.00475106486367188,activation/repression
+NFE2L1,PRDM1,0.00474059117562256,activation/repression
+PPARD,NFE2L1,0.00473701106972114,activation/repression
+PPARG,MYB,0.0046917563258305,activation/repression
+PPARG,CEBPB,0.00465201788340485,activation/repression
+TCFL5,PPARD,0.00455613878589158,activation/repression
+MYB,BCL6,0.00452305156536639,activation/repression
+PPARG,HOXA13,0.00448708511829543,activation/repression
+PRDM1,MYB,0.00447385220395763,activation/repression
+PRDM1,CEBPB,0.00443652724677179,activation/repression
+MYB,HOXA10,0.00442894603703374,activation/repression
+SNAI3,BCL6,0.00437810145652921,activation/repression
+IRF8,SNAI3,0.0043119571321339,activation/repression
+SNAI3,HOXA10,0.00428708100954756,activation/repression
+PRDM1,HOXA13,0.00427865388428527,activation/repression
+TFPT,PPARD,0.00427795936365782,activation/repression
+MAFB,UHRF1,0.00426854762444422,activation/repression
+UHRF1,UHRF1,0.00415303215499136,activation/repression
+BCL6,NFATC1,0.00406711796268223,activation/repression
+BCL6,FLI1,0.00404294494446264,activation/repression
+EGR2,BCL6,0.00403402697848127,activation/repression
+MAFB,MYB,0.00401837373043316,activation/repression
+MAFB,CEBPB,0.0039853851741428,activation/repression
+EGR2,HOXA10,0.00394086383165049,activation/repression
+TCFL5,IRF8,0.00392714330087446,activation/repression
+MYB,PPARD,0.00392391485269642,activation/repression
+BCL6,RUNX1,0.00392381140457992,activation/repression
+IRF8,CEBPD,0.00391319935156184,activation/repression
+UHRF1,MYB,0.00391092370763626,activation/repression
+PPARD,NFATC1,0.00388188337597766,activation/repression
+UHRF1,CEBPB,0.00387814852828676,activation/repression
+PPARD,FLI1,0.00385893590532425,activation/repression
+MAFB,HOXA13,0.0038428711190308,activation/repression
+CEBPD,PPARG,0.00383121163682224,activation/repression
+PPARG,NFE2L1,0.00380916219741261,activation/repression
+SNAI3,PPARD,0.00379837494185556,activation/repression
+PPARD,RUNX1,0.00374513070589084,activation/repression
+UHRF1,HOXA13,0.00374030282474263,activation/repression
+NFATC1,BCL6,0.00372451452565098,activation/repression
+TFPT,IRF8,0.00368914272277261,activation/repression
+FLI1,BCL6,0.00365941991859052,activation/repression
+NFATC1,HOXA10,0.00364770882582893,activation/repression
+PRDM1,NFE2L1,0.00363235954606996,activation/repression
+FLI1,HOXA10,0.00358368394299852,activation/repression
+EGR2,PPARD,0.00351290319474139,activation/repression
+MYB,IRF8,0.00340102915002721,activation/repression
+SNAI3,IRF8,0.00329260414258858,activation/repression
+MAFB,NFE2L1,0.00326276978136217,activation/repression
+TCFL5,UHRF1,0.00324683757562721,activation/repression
+NFATC1,PPARD,0.00323612714398933,activation/repression
+FLI1,PPARD,0.00317988350675938,activation/repression
+UHRF1,NFE2L1,0.00317527840330671,activation/repression
+PPARG,NFATC1,0.00312147697380851,activation/repression
+PPARG,FLI1,0.00310346035649616,activation/repression
+TCFL5,MYB,0.00305397307428552,activation/repression
+TFPT,UHRF1,0.00304938601933753,activation/repression
+EGR2,IRF8,0.00303555722837547,activation/repression
+TCFL5,CEBPB,0.00302839124213792,activation/repression
+PPARG,RUNX1,0.0030119341046338,activation/repression
+IRF8,BCL6,0.00300489053866222,activation/repression
+CEBPD,TFPT,0.00298616544670146,activation/repression
+PRDM1,NFATC1,0.00297654287880538,activation/repression
+PRDM1,FLI1,0.00295939213202711,activation/repression
+IRF8,HOXA10,0.00292714393502812,activation/repression
+TCFL5,HOXA13,0.00291944225620757,activation/repression
+PRDM1,RUNX1,0.00287236414380554,activation/repression
+TFPT,MYB,0.00286812784741465,activation/repression
+TFPT,CEBPB,0.00284647343290188,activation/repression
+CEBPD,TCFL5,0.00280981136738027,activation/repression
+NFATC1,IRF8,0.00280484609664562,activation/repression
+MYB,UHRF1,0.00278157463977602,activation/repression
+FLI1,IRF8,0.00275591827618425,activation/repression
+BCL6,MAFB,0.00274300904329348,activation/repression
+TFPT,HOXA13,0.00274293070281975,activation/repression
+SNAI3,UHRF1,0.00269261147970398,activation/repression
+MAFB,NFATC1,0.00267358734947189,activation/repression
+MAFB,FLI1,0.00265805315454604,activation/repression
+MYB,MYB,0.00263871092727953,activation/repression
+PPARD,MAFB,0.00261809365713461,activation/repression
+IRF8,PPARD,0.00261516564677178,activation/repression
+MYB,CEBPB,0.00260251309150522,activation/repression
+UHRF1,NFATC1,0.0026020025733118,activation/repression
+UHRF1,FLI1,0.00258701076166499,activation/repression
+MAFB,RUNX1,0.00258047114566822,activation/repression
+SNAI3,MYB,0.00255460740383613,activation/repression
+MYB,HOXA13,0.00253031467889657,activation/repression
+SNAI3,CEBPB,0.00251882568268258,activation/repression
+UHRF1,RUNX1,0.00251085016180989,activation/repression
+HOXA10,PPARG,0.00250460309642719,activation/repression
+HOXA13,PPARG,0.00248896942921448,activation/repression
+EGR2,UHRF1,0.00248496655398568,activation/repression
+TCFL5,NFE2L1,0.00248050342937753,activation/repression
+CEBPD,SNAI3,0.00247363892537241,activation/repression
+SNAI3,HOXA13,0.00244949784160208,activation/repression
+EGR2,MYB,0.00236048686057611,activation/repression
+TFPT,NFE2L1,0.002329157104802,activation/repression
+EGR2,CEBPB,0.00231689019919378,activation/repression
+NFATC1,UHRF1,0.00229179478663209,activation/repression
+IRF8,IRF8,0.00225563279839697,activation/repression
+EGR2,HOXA13,0.0022549260357058,activation/repression
+FLI1,UHRF1,0.00225185460557739,activation/repression
+CEBPD,CEBPD,0.00223884106447358,activation/repression
+NFATC1,MYB,0.00217728416357114,activation/repression
+NFATC1,CEBPB,0.00214169170811566,activation/repression
+FLI1,MYB,0.00213944906394911,activation/repression
+MYB,NFE2L1,0.00213837482621533,activation/repression
+PPARG,MAFB,0.00210523661473525,activation/repression
+FLI1,CEBPB,0.00210413191905223,activation/repression
+NFATC1,HOXA13,0.0020855172250253,activation/repression
+SNAI3,NFE2L1,0.00207004978630652,activation/repression
+FLI1,HOXA13,0.00204902682491438,activation/repression
+NFE2L1,PPARG,0.00203885912449154,activation/repression
+TCFL5,NFATC1,0.00203225784123472,activation/repression
+TCFL5,FLI1,0.00201915955845884,activation/repression
+PRDM1,MAFB,0.00200744345133575,activation/repression
+TCFL5,RUNX1,0.00196273325212879,activation/repression
+HOXA10,TFPT,0.00195875621028007,activation/repression
+HOXA13,TFPT,0.0019465948610917,activation/repression
+EGR2,NFE2L1,0.00191444916103962,activation/repression
+TFPT,NFATC1,0.00190839840116411,activation/repression
+TFPT,FLI1,0.00189762167206342,activation/repression
+IRF8,UHRF1,0.00185147357630154,activation/repression
+TFPT,RUNX1,0.00184292638784831,activation/repression
+HOXA10,TCFL5,0.00184192244865625,activation/repression
+HOXA13,TCFL5,0.00183047001482598,activation/repression
+MAFB,MAFB,0.00180302300611677,activation/repression
+NFATC1,NFE2L1,0.00176401384752779,activation/repression
+IRF8,MYB,0.00175558480710695,activation/repression
+UHRF1,MAFB,0.00175486019449495,activation/repression
+MYB,NFATC1,0.00175385233114749,activation/repression
+BCL6,EGR2,0.00174986496623814,activation/repression
+MYB,FLI1,0.00174907632496865,activation/repression
+FLI1,NFE2L1,0.00173337342526587,activation/repression
+IRF8,CEBPB,0.00172495407387857,activation/repression
+CEBPD,BCL6,0.00172083675029482,activation/repression
+SNAI3,NFATC1,0.00169789038828319,activation/repression
+SNAI3,FLI1,0.00169287259375406,activation/repression
+MYB,RUNX1,0.00168628994422832,activation/repression
+IRF8,HOXA13,0.00167503108715527,activation/repression
+CEBPD,HOXA10,0.00167209781786543,activation/repression
+PPARD,EGR2,0.00167023831990678,activation/repression
+SNAI3,RUNX1,0.00163224361521917,activation/repression
+HOXA10,SNAI3,0.00162044831995039,activation/repression
+HOXA13,SNAI3,0.00161035959298942,activation/repression
+NFE2L1,TFPT,0.00159559301188692,activation/repression
+EGR2,NFATC1,0.0015698255102945,activation/repression
+EGR2,FLI1,0.0015544980921292,activation/repression
+EGR2,RUNX1,0.00150829643210887,activation/repression
+NFE2L1,TCFL5,0.0015000791610336,activation/repression
+CEBPD,PPARD,0.00149784949117372,activation/repression
+HOXA10,CEBPD,0.00146976269805242,activation/repression
+HOXA13,CEBPD,0.00146071268472679,activation/repression
+NFATC1,NFATC1,0.00144708129703243,activation/repression
+NFATC1,FLI1,0.00143952698896257,activation/repression
+IRF8,NFE2L1,0.00142487811896424,activation/repression
+FLI1,NFATC1,0.00142194939791267,activation/repression
+FLI1,FLI1,0.00141419857123979,activation/repression
+NFATC1,RUNX1,0.00138970596274627,activation/repression
+TCFL5,MAFB,0.00137009273018862,activation/repression
+FLI1,RUNX1,0.00136550053323417,activation/repression
+PPARG,EGR2,0.00134334395800767,activation/repression
+NFE2L1,SNAI3,0.00131945548478976,activation/repression
+CEBPD,IRF8,0.00128836148421414,activation/repression
+TFPT,MAFB,0.00128687654455315,activation/repression
+PRDM1,EGR2,0.00128101892139887,activation/repression
+NFE2L1,CEBPD,0.00119944791736299,activation/repression
+MYB,MAFB,0.00118523028495538,activation/repression
+IRF8,NFATC1,0.00116801197489475,activation/repression
+IRF8,FLI1,0.00115489886144763,activation/repression
+MAFB,EGR2,0.00115062141425418,activation/repression
+SNAI3,MAFB,0.00114746918371661,activation/repression
+HOXA10,BCL6,0.00113093559128021,activation/repression
+HOXA13,BCL6,0.00112397306716879,activation/repression
+IRF8,RUNX1,0.00112324947833497,activation/repression
+UHRF1,EGR2,0.00111981825810186,activation/repression
+HOXA10,HOXA10,0.00109440884696375,activation/repression
+HOXA13,HOXA10,0.00108764000591086,activation/repression
+CEBPD,UHRF1,0.00106211454869829,activation/repression
+EGR2,MAFB,0.00105925148742338,activation/repression
+CEBPD,MYB,0.00100356266786236,activation/repression
+CEBPD,CEBPB,0.00098742044608198,activation/repression
+HOXA10,PPARD,0.000978648010809276,activation/repression
+NFATC1,MAFB,0.000977832418235939,activation/repression
+HOXA13,PPARD,0.000972538208184157,activation/repression
+FLI1,MAFB,0.000960815526051138,activation/repression
+CEBPD,HOXA13,0.000956667886730075,activation/repression
+NFE2L1,BCL6,0.000922797769734528,activation/repression
+NFE2L1,HOXA10,0.000892620757445431,activation/repression
+TCFL5,EGR2,0.000874090850469361,activation/repression
+HOXA10,IRF8,0.000841838935522422,activation/repression
+HOXA13,IRF8,0.000836611244259136,activation/repression
+TFPT,EGR2,0.000821560213379961,activation/repression
+CEBPD,NFE2L1,0.000815574236820977,activation/repression
+NFE2L1,PPARD,0.00079670141060425,activation/repression
+IRF8,MAFB,0.000787445427193685,activation/repression
+MYB,EGR2,0.00075579880689979,activation/repression
+SNAI3,EGR2,0.000731454919799614,activation/repression
+HOXA10,UHRF1,0.000697075117110027,activation/repression
+HOXA13,UHRF1,0.000692753623651045,activation/repression
+NFE2L1,IRF8,0.000686158992425875,activation/repression
+EGR2,EGR2,0.000671435106771234,activation/repression
+CEBPD,NFATC1,0.000668099505209776,activation/repression
+CEBPD,FLI1,0.000659990336794432,activation/repression
+HOXA10,MYB,0.000655258150226319,activation/repression
+HOXA13,MYB,0.000651175609360765,activation/repression
+HOXA10,CEBPB,0.000648676861225456,activation/repression
+HOXA13,CEBPB,0.000644684303746024,activation/repression
+CEBPD,RUNX1,0.00064423924650098,activation/repression
+HOXA10,HOXA13,0.00062556804314676,activation/repression
+NFATC1,EGR2,0.000621745012619751,activation/repression
+HOXA13,HOXA13,0.000621691103105509,activation/repression
+FLI1,EGR2,0.000610795702200672,activation/repression
+NFE2L1,UHRF1,0.000567977418651285,activation/repression
+NFE2L1,MYB,0.000533738291325031,activation/repression
+HOXA10,NFE2L1,0.000532645511919156,activation/repression
+NFE2L1,CEBPB,0.000529364028882801,activation/repression
+HOXA13,NFE2L1,0.000529320946675611,activation/repression
+NFE2L1,HOXA13,0.000510059125055073,activation/repression
+IRF8,EGR2,0.000499116319414235,activation/repression
+CEBPD,MAFB,0.000449909326512768,activation/repression
+HOXA10,NFATC1,0.000436227855641676,activation/repression
+NFE2L1,NFE2L1,0.000433670479543108,activation/repression
+HOXA13,NFATC1,0.000433506943440204,activation/repression
+HOXA10,FLI1,0.000432421560782158,activation/repression
+HOXA13,FLI1,0.000429752077308676,activation/repression
+HOXA10,RUNX1,0.00042173427258109,activation/repression
+HOXA13,RUNX1,0.000419105613371596,activation/repression
+NFE2L1,NFATC1,0.000355237110817797,activation/repression
+NFE2L1,FLI1,0.000352788482573637,activation/repression
+NFE2L1,RUNX1,0.000343348775484182,activation/repression
+HOXA10,MAFB,0.000293831476027772,activation/repression
+HOXA13,MAFB,0.000292003524979656,activation/repression
+CEBPD,EGR2,0.000285387595615648,activation/repression
+NFE2L1,MAFB,0.000239412729811081,activation/repression
+HOXA10,EGR2,0.000187179181107263,activation/repression
+HOXA13,EGR2,0.000186025438623728,activation/repression
+NFE2L1,EGR2,0.00015273908524544,activation/repression
+CEBPB,BCL6,0,no regulation
+CEBPB,CEBPB,0,no regulation
+CEBPB,CEBPD,0,no regulation
+CEBPB,EGR2,0,no regulation
+CEBPB,FLI1,0,no regulation
+CEBPB,HOXA10,0,no regulation
+CEBPB,HOXA13,0,no regulation
+CEBPB,IRF8,0,no regulation
+CEBPB,MAFB,0,no regulation
+CEBPB,MYB,0,no regulation
+CEBPB,NFATC1,0,no regulation
+CEBPB,NFE2L1,0,no regulation
+CEBPB,PPARD,0,no regulation
+CEBPB,PPARG,0,no regulation
+CEBPB,PRDM1,0,no regulation
+CEBPB,RUNX1,0,no regulation
+CEBPB,SNAI3,0,no regulation
+CEBPB,TCFL5,0,no regulation
+CEBPB,TFPT,0,no regulation
+CEBPB,UHRF1,0,no regulation
+RUNX1,BCL6,0,no regulation
+RUNX1,CEBPB,0,no regulation
+RUNX1,CEBPD,0,no regulation
+RUNX1,EGR2,0,no regulation
+RUNX1,FLI1,0,no regulation
+RUNX1,HOXA10,0,no regulation
+RUNX1,HOXA13,0,no regulation
+RUNX1,IRF8,0,no regulation
+RUNX1,MAFB,0,no regulation
+RUNX1,MYB,0,no regulation
+RUNX1,NFATC1,0,no regulation
+RUNX1,NFE2L1,0,no regulation
+RUNX1,PPARD,0,no regulation
+RUNX1,PPARG,0,no regulation
+RUNX1,PRDM1,0,no regulation
+RUNX1,RUNX1,0,no regulation
+RUNX1,SNAI3,0,no regulation
+RUNX1,TCFL5,0,no regulation
+RUNX1,TFPT,0,no regulation
+RUNX1,UHRF1,0,no regulation

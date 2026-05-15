@@ -88,6 +88,7 @@ main <- function(args) {
         main.chroms <- standardChromosomes(BSgenome.Hsapiens.UCSC.hg38)
     } else if (args$ref_genome == "mm10") {
         library(BSgenome.Mmusculus.UCSC.mm10)
+        main.chroms <- standardChromosomes(BSgenome.Mmusculus.UCSC.mm10)
     } else {
         stop("Invalid reference genome")
     }
@@ -103,9 +104,11 @@ main <- function(args) {
     # log_memory_usage()
 
     # Load gene and cell lists
-    gene_selected <- read.csv(args$genelist, header = FALSE)
+    gene_selected <- read.csv(args$genelist, header = FALSE, stringsAsFactors = FALSE)
+    gene_selected <- trimws(as.character(gene_selected[[1]]))
+    gene_selected <- unique(gene_selected[gene_selected != ""])
     loginfo(paste("Gene list:", args$genelist))
-    loginfo(paste("Number of genes:", nrow(gene_selected)))
+    loginfo(paste("Number of genes:", length(gene_selected)))
     # log_memory_usage()
 
     cell_selected <- read.csv(args$celllist, row.names = 1)
@@ -124,7 +127,7 @@ main <- function(args) {
     # Preprocess data
     loginfo("[2/3] Preprocessing the data...")
     DefaultAssay(obj) <- "ATAC"
-    keep.peaks <- as.logical(seqnames(granges(obj)) %in% standardChromosomes(BSgenome.Hsapiens.UCSC.hg38))
+    keep.peaks <- as.logical(seqnames(granges(obj)) %in% main.chroms)
     obj[["ATAC"]] <- subset(obj[["ATAC"]], features = rownames(obj[["ATAC"]])[keep.peaks])
     # log_memory_usage()
 
@@ -140,7 +143,14 @@ main <- function(args) {
 
         # Step 1: Convert Seurat object to SummarizedExperiment
         step1_start_time <- Sys.time()
-        obj_lin <- obj[, unlist(cell_selected[lin]) == "True"]
+        lin_mask <- unlist(cell_selected[lin]) == "True"
+        selected_cells <- rownames(cell_selected)[lin_mask]
+        selected_cells <- intersect(selected_cells, colnames(obj))
+        if (length(selected_cells) == 0) {
+            loginfo(paste("Skip", lin, "because no selected cells are available after filtering."))
+            next
+        }
+        obj_lin <- obj[, selected_cells]
         DefaultAssay(obj_lin) <- "ATAC"
         ATAC.se <- SummarizedExperiment(
             assay = list(counts = obj_lin$ATAC@counts),
@@ -148,10 +158,23 @@ main <- function(args) {
             colData = obj_lin@meta.data
         )
 
-        RNAmat <- obj_lin$RNA@data
         DefaultAssay(obj_lin) <- "RNA"
-        RNAmat <- RNAmat[unlist(gene_selected), ]
-        RNAmat <- RNAmat[Matrix::rowSums(RNAmat) != 0, ]  # Remove genes with zero expression
+        RNAmat <- obj_lin$RNA@data
+        available_genes <- intersect(gene_selected, rownames(RNAmat))
+        missing_genes <- setdiff(gene_selected, rownames(RNAmat))
+        if (length(missing_genes) > 0) {
+            loginfo(paste("Warning:", length(missing_genes), "genes are not found in RNA matrix and will be skipped."))
+        }
+        if (length(available_genes) == 0) {
+            loginfo(paste("Skip", lin, "because no genes from gene list are found in RNA matrix."))
+            next
+        }
+        RNAmat <- RNAmat[available_genes, , drop = FALSE]
+        RNAmat <- RNAmat[Matrix::rowSums(RNAmat) != 0, , drop = FALSE]  # Remove genes with zero expression
+        if (nrow(RNAmat) == 0) {
+            loginfo(paste("Skip", lin, "because all selected genes have zero RNA expression."))
+            next
+        }
         step1_end_time <- Sys.time()
         loginfo(paste("Step 1: Convert Seurat object to SummarizedExperiment for", lin, "takes", step1_end_time - step1_start_time))
         # log_memory_usage()
