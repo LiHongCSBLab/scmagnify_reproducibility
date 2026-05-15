@@ -84,6 +84,31 @@ fi
 # shellcheck source=/dev/null
 source "$CONDA_SH"
 
+baseline_runner_conda_activate() {
+    local env_name="$1"
+    local had_nounset=0
+    case "$-" in
+        *u*) had_nounset=1 ;;
+    esac
+    set +u
+    conda activate "$env_name"
+    if [[ "$had_nounset" -eq 1 ]]; then
+        set -u
+    fi
+}
+
+baseline_runner_conda_deactivate() {
+    local had_nounset=0
+    case "$-" in
+        *u*) had_nounset=1 ;;
+    esac
+    set +u
+    conda deactivate
+    if [[ "$had_nounset" -eq 1 ]]; then
+        set -u
+    fi
+}
+
 # --- Parse YAML ---
 HOME_DIR=$(yq eval '.home' "$CONFIG_FILE")
 DATASET_KEY=$(yq eval '.dataset' "$CONFIG_FILE")
@@ -174,7 +199,7 @@ for i in $(seq 0 $((METHOD_COUNT - 1))); do
 
     echo "Running method: $METHOD_NAME..."
 
-    conda activate "$METHOD_ENV"
+    baseline_runner_conda_activate "$METHOD_ENV"
 
     script_ext="${METHOD_SCRIPT##*.}"
     : > "$METHOD_LOG"
@@ -206,7 +231,7 @@ for i in $(seq 0 $((METHOD_COUNT - 1))); do
             ;;
     esac
 
-    conda deactivate
+    baseline_runner_conda_deactivate
 done
 
 echo "BaselineRunner finished all methods."

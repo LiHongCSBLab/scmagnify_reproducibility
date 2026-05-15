@@ -110,30 +110,72 @@ def main(args: argparse.Namespace) -> None:
         
     logging.info(f"[3/4] Running SCENIC...")
     
-    scenic_grn_ctx = "/home/chenxufeng/WorkSpace/scMagnify/scMagnify-benchmark/baseline/workflow/scenic_grn_ctx.sh"
+    scenic_grn_ctx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenic_grn_ctx.sh")
+    if not os.path.exists(scenic_grn_ctx):
+        logging.error("SCENIC helper script not found: %s", scenic_grn_ctx)
+        sys.exit(1)
     input_dir = tmpSaveDir
     ref_genome = args.refGenome
     try:
         result = subprocess.run(
-            [scenic_grn_ctx, input_dir, ref_genome],  
+            ["bash", scenic_grn_ctx, input_dir, ref_genome],  
             check=True,  
             text=True,   
             capture_output=True  
         )
-        logging.info(result.stdout)
+        if result.stdout:
+            logging.info(result.stdout)
+        if result.stderr:
+            logging.info("SCENIC stderr:\n%s", result.stderr)
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to run SCENIC: {e}")
+        if e.stdout:
+            logging.error("SCENIC stdout before failure:\n%s", e.stdout)
+        if e.stderr:
+            logging.error("SCENIC stderr before failure:\n%s", e.stderr)
         sys.exit(1)
-    logging.info(result.stdout)
     
     logging.info(f"[4/4] Saving results...")
     for i, lin in enumerate(cell_selected.columns):
-    
-        adj = pd.read_csv(os.path.join(tmpSaveDir, lin, "expr_mat.adjacencies.tsv"), sep="\t", index_col=0)
+        adj_path = os.path.join(tmpSaveDir, lin, "expr_mat.adjacencies.tsv")
+        if not os.path.exists(adj_path):
+            logging.error(
+                "Missing adjacency file for lineage '%s': %s. "
+                "Likely failure in pyscenic grn step.",
+                lin,
+                adj_path,
+            )
+            sys.exit(1)
+        if os.path.getsize(adj_path) == 0:
+            logging.error(
+                "Empty adjacency file for lineage '%s': %s. "
+                "Likely failure in pyscenic grn step; check SCENIC stderr logs.",
+                lin,
+                adj_path,
+            )
+            sys.exit(1)
+        adj = pd.read_csv(adj_path, sep="\t", index_col=0)
         adj.columns = ["Target", "Score"]
         adj.to_csv(os.path.join(benchmarkDir, "net", f"GRNBoost2_{lin}.csv"), sep=",")
         
-        regulons = pd.read_csv(os.path.join(tmpSaveDir, lin, "regulons.csv"), sep=",", index_col=0, skiprows=1)  
+        regulons_path = os.path.join(tmpSaveDir, lin, "regulons.csv")
+        if not os.path.exists(regulons_path):
+            logging.error(
+                "Missing regulons file for lineage '%s': %s. "
+                "Likely failure in pyscenic ctx step.",
+                lin,
+                regulons_path,
+            )
+            sys.exit(1)
+        if os.path.getsize(regulons_path) == 0:
+            logging.error(
+                "Empty regulons file for lineage '%s': %s. "
+                "Likely failure in pyscenic ctx step; check SCENIC stderr logs.",
+                lin,
+                regulons_path,
+            )
+            sys.exit(1)
+        regulons = pd.read_csv(regulons_path, sep=",", index_col=0, skiprows=1)  
         regulon_df = pd.DataFrame(regulons["TargetGenes"][1:], index=regulons.index[1:])
         
         edge_data = []

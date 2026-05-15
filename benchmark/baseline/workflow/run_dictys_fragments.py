@@ -263,12 +263,12 @@ def _resolve_resources(args: argparse.Namespace) -> DictysResources:
     if args.refGenome == "hg38":
         homer_genome = args.homer_genome or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/human/hg38/homer_genome")
         motifs = args.motifs or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Database/motif_databases/HOCOMOCO/HOCOMOCOv11_full_HUMAN_mono_homer_format_0.0001.motif")
-        gene_bed = args.gene_bed or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/human/hg38/annotations/ucsc/gene.bed")
+        gene_bed = args.gene_bed or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/human/hg38/annotations/ensembl/gene.bed")
         chrom_sizes = HG38_CHROM_SIZES
     elif args.refGenome == "mm10":
         homer_genome = args.homer_genome or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/mouse/mm10/homer_genome")
         motifs = args.motifs or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Database/motif_databases/HOCOMOCO/HOCOMOCOv11_full_MOUSE_mono_homer_format_0.0001.motif")
-        gene_bed = args.gene_bed or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/mouse/mm10/annotations/ucsc/gene.bed")
+        gene_bed = args.gene_bed or pathlib.Path("/mnt/TrueNas/project/chenxufeng/Ref/mouse/mm10/annotations/ensembl/gene.bed")
         chrom_sizes = MM10_CHROM_SIZES
     else:
         raise ValueError(f"Unsupported reference genome: {args.refGenome}")
@@ -334,22 +334,42 @@ def _load_barcode_map(path: pathlib.Path | None) -> dict[tuple[str | None, str],
     if not path.exists():
         raise FileNotFoundError(f"Barcode map does not exist: {path}")
 
-    df = pd.read_csv(path)
-    raw_col = next((col for col in ["fragment_barcode", "raw_barcode", "barcode"] if col in df.columns), None)
-    obs_col = next((col for col in ["obs_name", "cell", "cell_name"] if col in df.columns), None)
+    # sep=None lets pandas infer comma/tab separators (works for .csv/.tsv/.txt and .gz)
+    df = pd.read_csv(path, sep=None, engine="python")
+    raw_col = next(
+        (col for col in ["fragment_barcode", "raw_barcode", "barcode", "atac.bc", "atac_bc"] if col in df.columns),
+        None,
+    )
+    obs_col = next(
+        (col for col in ["obs_name", "cell", "cell_name", "rna.bc", "rna_bc"] if col in df.columns),
+        None,
+    )
     sample_col = "sample" if "sample" in df.columns else None
     if raw_col is None or obs_col is None:
-        raise ValueError("Barcode map must contain fragment_barcode/raw_barcode/barcode and obs_name/cell columns")
+        raise ValueError(
+            "Barcode map must contain one raw barcode column "
+            "(fragment_barcode/raw_barcode/barcode/atac.bc) and one obs column "
+            "(obs_name/cell/cell_name/rna.bc)"
+        )
 
     mapping: dict[tuple[str | None, str], str] = {}
-    for row in df.itertuples(index=False):
-        raw = str(getattr(row, raw_col))
-        obs = str(getattr(row, obs_col))
-        sample = str(getattr(row, sample_col)) if sample_col else None
-        key = (sample, raw)
-        if key in mapping and mapping[key] != obs:
-            raise ValueError(f"Conflicting barcode map entries for {key}")
-        mapping[key] = obs
+    for _, row in df.iterrows():
+        raw = str(row[raw_col]).strip()
+        obs = str(row[obs_col]).strip()
+        if not raw or not obs or raw.lower() == "nan" or obs.lower() == "nan":
+            continue
+
+        sample = str(row[sample_col]).strip() if sample_col and pd.notna(row[sample_col]) else None
+        # Accept both comma and dot separators to bridge raw fragment files and normalized cell IDs.
+        raw_candidates = {raw}
+        raw_candidates.add(raw.replace(",", "."))
+        raw_candidates.add(raw.replace(".", ","))
+
+        for raw_key in raw_candidates:
+            key = (sample, raw_key)
+            if key in mapping and mapping[key] != obs:
+                raise ValueError(f"Conflicting barcode map entries for {key}")
+            mapping[key] = obs
     return mapping
 
 
