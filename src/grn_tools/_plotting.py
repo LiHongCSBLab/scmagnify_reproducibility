@@ -13,7 +13,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from typing import List, Optional
 
-__all__ = ["show_color", "plot_metrics", "plot_precision_recall", "plot_overlaps", "plot_pie_charts", "plot_violin", "plot_boxplot", "plot_paired_boxplot", "plot_horizontal_boxplot", "plot_line", "show_color_dict", "get_tab20_colors_dict", "quartile_to_level", "get_kde", "flatten_dict_values", "plot_scatter_with_error_bars"]
+__all__ = ["show_color", "plot_metrics", "plot_precision_recall", "plot_overlaps", "plot_pie_charts", "plot_violin", "plot_boxplot", "plot_paired_boxplot", "plot_horizontal_boxplot", "plot_metric_summary", "plot_line", "show_color_dict", "get_tab20_colors_dict", "quartile_to_level", "get_kde", "flatten_dict_values", "plot_scatter_with_error_bars"]
 
 def plot_metrics(dfs, algo_list):
     
@@ -441,6 +441,207 @@ def plot_horizontal_boxplot(
 
     sns.despine(trim=True, left=True)
     
+    return ax
+
+
+def plot_metric_summary(
+    data,
+    x,
+    y,
+    hue="Algorithm",
+    summary="median_iqr",
+    show_points=True,
+    random_aupr_col=None,
+    order=None,
+    hue_order=None,
+    palette=None,
+    ax=None,
+    figsize=(7, 4),
+    point_size=18,
+    summary_size=45,
+    jitter=0.05,
+    dodge_width=0.75,
+    random_baseline_color="0.35",
+    random_baseline_lw=1.0,
+    random_baseline_label="Random AUPR",
+    seed=0,
+    **kwargs,
+):
+    """
+    Plot benchmark metric summaries with either median/IQR or mean/SEM.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input long-form metric table.
+    x : str
+        Categorical x-axis column.
+    y : str
+        Numeric metric column.
+    hue : str, optional
+        Grouping column, usually "Algorithm". Set to None for a single group.
+    summary : {"median_iqr", "mean_sem"}
+        Summary statistic and interval to display.
+    show_points : bool
+        Whether to overlay individual observations.
+    random_aupr_col : str, optional
+        Column containing expected random AUPR values. When provided, a dashed
+        baseline is drawn for each x category.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The Axes object containing the plot.
+    """
+    required_columns = [x, y]
+    if hue is not None:
+        required_columns.append(hue)
+    if random_aupr_col is not None:
+        required_columns.append(random_aupr_col)
+    if not all(col in data.columns for col in required_columns):
+        raise ValueError(f"DataFrame must contain columns: {required_columns}")
+    if data.empty:
+        raise ValueError("Input DataFrame is empty")
+    if summary not in {"median_iqr", "mean_sem"}:
+        raise ValueError("`summary` must be either 'median_iqr' or 'mean_sem'.")
+
+    plot_data = data.dropna(subset=[x, y]).copy()
+    if order is None:
+        order = list(pd.unique(plot_data[x]))
+    if hue is None:
+        hue_order = [None]
+    elif hue_order is None:
+        hue_order = list(pd.unique(plot_data[hue]))
+
+    if palette is None:
+        palette = get_tab20_colors_dict(hue_order if hue is not None else order)
+    elif not isinstance(palette, dict):
+        palette = dict(zip(hue_order if hue is not None else order, palette))
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    rng = np.random.default_rng(seed)
+    x_positions = {name: idx for idx, name in enumerate(order)}
+    if hue is None or len(hue_order) == 1:
+        offsets = {hue_order[0]: 0.0}
+    else:
+        raw_offsets = np.linspace(-dodge_width / 2, dodge_width / 2, len(hue_order))
+        offsets = dict(zip(hue_order, raw_offsets))
+
+    legend_handles = []
+    legend_labels = []
+
+    for hue_value in hue_order:
+        xs, centers, lower, upper = [], [], [], []
+        summary_colors = []
+
+        for x_value in order:
+            color_key = hue_value if hue is not None else x_value
+            color = palette.get(color_key, "C0")
+            if hue is None:
+                group = plot_data[plot_data[x] == x_value]
+            else:
+                group = plot_data[(plot_data[x] == x_value) & (plot_data[hue] == hue_value)]
+            values = group[y].dropna().astype(float)
+            if values.empty:
+                continue
+
+            xpos = x_positions[x_value] + offsets[hue_value]
+            if summary == "median_iqr":
+                center = values.median()
+                q1 = values.quantile(0.25)
+                q3 = values.quantile(0.75)
+                lo = center - q1
+                hi = q3 - center
+            else:
+                center = values.mean()
+                sem = values.sem()
+                if pd.isna(sem):
+                    sem = 0.0
+                lo = hi = sem
+
+            xs.append(xpos)
+            centers.append(center)
+            lower.append(lo)
+            upper.append(hi)
+            summary_colors.append(color)
+
+            if show_points:
+                jitter_values = rng.uniform(-jitter, jitter, size=len(values))
+                ax.scatter(
+                    np.full(len(values), xpos) + jitter_values,
+                    values,
+                    s=point_size,
+                    color=color,
+                    alpha=0.55,
+                    edgecolor="none",
+                    zorder=2,
+                    **kwargs,
+                )
+
+        if xs:
+            ax.errorbar(
+                xs,
+                centers,
+                yerr=[lower, upper],
+                fmt="none",
+                ecolor="black" if hue is None else summary_colors[0],
+                elinewidth=1.2,
+                capsize=3,
+                zorder=3,
+            )
+            handle = ax.scatter(
+                xs,
+                centers,
+                s=summary_size,
+                color=summary_colors,
+                edgecolor="black",
+                linewidth=0.6,
+                zorder=4,
+                label=str(hue_value) if hue is not None else None,
+            )
+            if hue is not None:
+                legend_handles.append(handle)
+                legend_labels.append(str(hue_value))
+
+    if random_aupr_col is not None:
+        for x_value in order:
+            baseline_values = plot_data.loc[plot_data[x] == x_value, random_aupr_col].dropna().astype(float)
+            if baseline_values.empty:
+                continue
+            baseline = baseline_values.median()
+            xpos = x_positions[x_value]
+            ax.hlines(
+                baseline,
+                xpos - dodge_width / 2,
+                xpos + dodge_width / 2,
+                colors=random_baseline_color,
+                linestyles="--",
+                linewidth=random_baseline_lw,
+                zorder=1,
+            )
+        baseline_handle = plt.Line2D(
+            [0],
+            [0],
+            color=random_baseline_color,
+            lw=random_baseline_lw,
+            linestyle="--",
+            label=random_baseline_label,
+        )
+        legend_handles.append(baseline_handle)
+        legend_labels.append(random_baseline_label)
+
+    ax.set_xticks(range(len(order)))
+    ax.set_xticklabels(order, rotation=45, ha="right")
+    ax.set_xlabel(x)
+    ax.set_ylabel(y)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    sns.despine(ax=ax)
+
+    if legend_handles:
+        ax.legend(legend_handles, legend_labels, title=None, loc="best")
+
     return ax
 
 

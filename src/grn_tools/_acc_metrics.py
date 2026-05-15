@@ -16,7 +16,13 @@ from ._constants import DATASETS, GROUNDTRUTHS_TISSUE, DATA_DIR, GROUNDTRUTHS_LI
 from ._utils import matrix_to_edge, flatten, capitalize
 
 
-__all__ = ["evaluate_TFbind", "batch_evaluate_TFbind", "batch_evaluate_TFbind_perTF", "batch_evaluate_scMultiSim"]
+__all__ = [
+    "compute_random_aupr_baseline",
+    "evaluate_TFbind",
+    "batch_evaluate_TFbind",
+    "batch_evaluate_TFbind_perTF",
+    "batch_evaluate_scMultiSim",
+]
 
 # ================ Metrics ================
 
@@ -76,6 +82,55 @@ def compute_EPR(est, true):
  
     epr = ep / rp
     return epr, ep, rp
+
+
+def compute_random_aupr_baseline(est, true):
+    """
+    Compute the expected AUPR of a random predictor as edge density.
+
+    This uses the same candidate edge universe as ``compute_AUPR``:
+    every TF in the ground truth is paired with every gene appearing in
+    ground-truth TFs or targets.
+
+    Parameters:
+    -----------
+    est: estimated edge dataframe [TF, Target, Score]
+        Kept for API symmetry with other metric functions. Candidate edges
+        are defined by the ground truth to match ``compute_AUPR``.
+    true: true edge dataframe [TF, Target]
+
+    Return:
+    -------
+    random_aupr: float
+        Expected AUPR of random predictors, equal to edge density.
+    n_positive_edges: int
+        Number of positive ground-truth edges in the candidate universe.
+    n_candidate_edges: int
+        Number of candidate TF-target pairs.
+    """
+    est = est.copy()
+    true = true.copy()
+
+    if est.shape[1] >= 3:
+        est.columns = ["TF", "Target", "Score"]
+    if true.shape[1] >= 2:
+        true = true.iloc[:, :2]
+        true.columns = ["TF", "Target"]
+
+    if true.empty:
+        return np.nan, 0, 0
+
+    TFs = set(true["TF"])
+    Genes = set(true["TF"]) | set(true["Target"])
+    n_candidate_edges = len(TFs) * len(Genes)
+    n_positive_edges = len(set(zip(true["TF"], true["Target"])))
+
+    if n_candidate_edges == 0:
+        random_aupr = np.nan
+    else:
+        random_aupr = n_positive_edges / n_candidate_edges
+
+    return random_aupr, n_positive_edges, n_candidate_edges
 
 def compute_AUPR(est, true, partial=1, plot=False, save=False, save_prefix=None):
     """
@@ -874,4 +929,3 @@ def batch_evaluate_scMultiSim(algo_list,
         
         
     
-

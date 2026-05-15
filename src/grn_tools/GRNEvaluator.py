@@ -19,10 +19,10 @@ from rich.progress import track
 # --- From grn_tools package ---
 # Ensure the grn_tools package is in your Python path
 from grn_tools._acc_metrics import (compute_AUPR, compute_AUROC, compute_EPR,
-                                    compute_Fscore)
+                                    compute_Fscore, compute_random_aupr_baseline)
 from grn_tools._constants import (DATASETS, GROUNDTRUTHS_TISSUE,
                                   METHOD_PALETTE_SCMULTISIM, METHOD_PALETTE_CISTROME)
-from grn_tools._plotting import plot_horizontal_boxplot, plot_scatter_with_error_bars, plot_violin
+from grn_tools._plotting import plot_horizontal_boxplot, plot_metric_summary, plot_scatter_with_error_bars, plot_violin
 from grn_tools._stab_metrics import cosine_similarity, jaccard_similarity
 
 import scmagnify as scm
@@ -48,6 +48,7 @@ class GRNEvaluator:
         self.groundtruth_info = None # Caches the description table for ground truths
         self.accuracy_results = None  # DataFrame storing summary accuracy metrics
         self.accuracy_details = []  # List of dicts with detailed results, including curve data
+        self.metric_statistics = None  # DataFrame storing paired statistical tests
         self.stability_results = {}  # Stores stability metric results (e.g., Jaccard, Cosine)
         self.console = Console()  # Rich console for pretty printing
         self.algo_palette = METHOD_PALETTE_CISTROME  # Default color palette for algorithms
@@ -542,6 +543,8 @@ class GRNEvaluator:
             # --- Metric Calculation ---
             # Call external functions to compute metrics and capture curve data
             aupr, precision, recall, aupr_ratio, _ = compute_AUPR(est_grn_proc, gt_grn_proc)
+            random_aupr, n_positive_edges, n_candidate_edges = compute_random_aupr_baseline(est_grn_proc, gt_grn_proc)
+            aupr_fold_over_random = aupr / random_aupr if random_aupr and not np.isnan(random_aupr) else np.nan
             auroc, fpr, tpr = compute_AUROC(est_grn_proc, gt_grn_proc)
             
             # Store curve data safely, handling cases where it might be None
@@ -561,6 +564,9 @@ class GRNEvaluator:
             detail_info = {
                 "meta": meta,
                 "AUPR": aupr, "AUPR Ratio": aupr_ratio, "AUROC": auroc, "EPR": epr,
+                "Random AUPR": random_aupr, "Edge Density": random_aupr,
+                "N Positive Edges": n_positive_edges, "N Candidate Edges": n_candidate_edges,
+                "AUPR Fold over Random": aupr_fold_over_random,
                 f"F1 Score ({thres_mode})": f1score, f"F0.1 Score ({thres_mode})": f01score,
                 "threshold": thres,
                 "pr_curve": pr_curve_data,  # Store Precision-Recall curve points
@@ -638,6 +644,101 @@ class GRNEvaluator:
                 return pd.DataFrame()
         
         return data
+
+    def calculate_metric_statistics(
+        self,
+        metrics: Union[str, List[str]],
+        reference_algorithm: str = "scMagnify",
+        pair_cols: Tuple[str, ...] = ("Dataset", "Lineage"),
+        query: str = None,
+        regex: Dict[str, str] = None,
+        correction: str = "fdr_bh",
+    ) -> pd.DataFrame:
+        """
+        Calculates paired Wilcoxon tests for benchmark metrics.
+
+        The default comparison is scMagnify versus each other algorithm, paired
+        by Dataset and Lineage. Results are returned as a table only; no
+        significance markers are added to plots.
+        """
+        from scipy.stats import wilcoxon
+        from statsmodels.stats.multitest import multipletests
+
+        data = self.filter_accuracy_results(query=query, regex=regex)
+        if data.empty:
+            self.console.print("[yellow]No data matches the filters. Cannot calculate statistics.[/]")
+            return pd.DataFrame()
+
+        if isinstance(metrics, str):
+            metrics = [metrics]
+
+        required_columns = ["Algorithm", *pair_cols, *metrics]
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        if missing_columns:
+            raise ValueError(f"Accuracy results are missing required columns: {missing_columns}")
+
+        grouped = (
+            data[required_columns]
+            .dropna(subset=["Algorithm", *pair_cols])
+            .groupby(["Algorithm", *pair_cols], as_index=False)
+            .mean(numeric_only=True)
+        )
+
+        rows = []
+        for metric in metrics:
+            metric_df = grouped[["Algorithm", *pair_cols, metric]].dropna(subset=[metric])
+            algorithms = [algo for algo in metric_df["Algorithm"].unique() if algo != reference_algorithm]
+
+            for algorithm in algorithms:
+                ref_df = metric_df[metric_df["Algorithm"] == reference_algorithm][list(pair_cols) + [metric]]
+                comp_df = metric_df[metric_df["Algorithm"] == algorithm][list(pair_cols) + [metric]]
+                paired = ref_df.merge(comp_df, on=list(pair_cols), suffixes=("_reference", "_comparison"))
+                n_pairs = len(paired)
+
+                statistic = np.nan
+                p_value = np.nan
+                if n_pairs >= 2:
+                    diff = paired[f"{metric}_reference"] - paired[f"{metric}_comparison"]
+                    if np.allclose(diff, 0):
+                        statistic = 0.0
+                        p_value = 1.0
+                    else:
+                        try:
+                            result = wilcoxon(
+                                paired[f"{metric}_reference"],
+                                paired[f"{metric}_comparison"],
+                                zero_method="wilcox",
+                                alternative="two-sided",
+                            )
+                            statistic = result.statistic
+                            p_value = result.pvalue
+                        except ValueError:
+                            statistic = np.nan
+                            p_value = np.nan
+
+                rows.append(
+                    {
+                        "Metric": metric,
+                        "Reference": reference_algorithm,
+                        "Comparison": algorithm,
+                        "N pairs": n_pairs,
+                        "Statistic": statistic,
+                        "P value": p_value,
+                        "Q value": np.nan,
+                        "Correction": correction,
+                        "Test": "Wilcoxon signed-rank",
+                        "Pair columns": ", ".join(pair_cols),
+                    }
+                )
+
+        stats_df = pd.DataFrame(rows)
+        if not stats_df.empty and stats_df["P value"].notna().any():
+            valid = stats_df["P value"].notna()
+            _, q_values, _, _ = multipletests(stats_df.loc[valid, "P value"], method=correction)
+            stats_df.loc[valid, "Q value"] = q_values
+
+        self.metric_statistics = stats_df
+        return stats_df
 
     def calculate_stability(self, query: str = None, regex: Dict[str, str] = None, group_by: str = "Dataset"):
         """
@@ -1416,6 +1517,64 @@ class GRNEvaluator:
                 filename = f"{save}.pdf"
             fig.savefig(filename, dpi=300, bbox_inches='tight')
             self.console.print(f"💾 Saved combined accuracy plot to: {filename}")
+
+    def plot_metric_summary(
+        self,
+        metric: str,
+        x: str = "Algorithm",
+        hue: str = None,
+        query: str = None,
+        regex: Dict[str, str] = None,
+        summary: str = "median_iqr",
+        show_points: bool = True,
+        random_aupr_col: str = "Random AUPR",
+        save: str = None,
+        **kwargs,
+    ):
+        """
+        Plots a benchmark metric with explicit median/IQR or mean/SEM summaries.
+
+        This method is intended for revision performance panels where individual
+        observations should be visible and SEM-style summaries should be opt-in.
+        """
+        data_to_plot = self.filter_accuracy_results(query=query, regex=regex)
+        if data_to_plot.empty:
+            self.console.print("[yellow]No data matches the filters. Cannot generate metric summary plot.[/]")
+            return None
+
+        if random_aupr_col is not None and random_aupr_col not in data_to_plot.columns:
+            random_aupr_col = None
+
+        palette_values = data_to_plot[hue].unique().tolist() if hue is not None else data_to_plot[x].unique().tolist()
+        palette = self._get_algo_palette(palette_values) if "Algorithm" in {x, hue} else None
+
+        figsize = kwargs.pop("figsize", (max(5, len(data_to_plot[x].unique()) * 0.7), 4))
+        fig, ax = plt.subplots(figsize=figsize)
+        ax = plot_metric_summary(
+            data=data_to_plot,
+            x=x,
+            y=metric,
+            hue=hue,
+            summary=summary,
+            show_points=show_points,
+            random_aupr_col=random_aupr_col if metric == "AUPR" else None,
+            palette=palette,
+            ax=ax,
+            **kwargs,
+        )
+        ax.set_title(f"{metric} ({summary})")
+        plt.tight_layout()
+        plt.show()
+
+        if save:
+            if save.endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.pdf', '.svg')):
+                filename = save
+            else:
+                filename = f"{save}.pdf"
+            fig.savefig(filename, dpi=300, bbox_inches='tight')
+            self.console.print(f"💾 Saved metric summary plot to: {filename}")
+
+        return ax
         
     def plot_barplot(self, metric: str, query: str = None, regex: Dict[str, str] = None, **kwargs):
         """

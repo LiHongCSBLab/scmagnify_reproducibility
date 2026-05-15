@@ -29,6 +29,7 @@ dependencies = [
     "tqdm",
     "rich",
     "scipy",
+    "statsmodels",
     "mplscience",
     "Pillow",
     "psutil",
@@ -71,7 +72,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 use_parentheses = true
-known_num = "networkx,numpy,pandas,scipy,sklearn,statmodels"
+known_num = "networkx,numpy,pandas,scipy,sklearn,statsmodels"
 known_plot = "matplotlib,mplscience,mpl_toolkits,seaborn"
 known_bio = "anndata,scanpy"
 sections = "FUTURE,STDLIB,THIRDPARTY,NUM,PLOT,BIO,FIRSTPARTY,LOCALFOLDER"
