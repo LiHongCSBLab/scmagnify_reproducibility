@@ -4,7 +4,7 @@ home: "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/
 cell: "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/cell_list/cell_state_masks.csv"
 gene: "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/benchmark/gene_list/test_assoc_fdr1e-3_A0.3.csv"
 ref-genome: "hg38" #mm10
-version: "260411"
+version: "260517"
 tmp-save: True
 seed: 0
 
@@ -76,7 +76,7 @@ methods:
       - "--auc-threshold"
       - "0.01"
       - "--nes-threshold"
-      - "2.0"
+      - "1.5"
       - "--resume"
       - "true"
       - "--resume-mode"
@@ -85,6 +85,8 @@ methods:
       - "16"
       - "--ext"
       - "50000"
+  # Changing --auc-threshold / --nes-threshold triggers motif+downstream rebuild when
+  # resume-mode is stage (tracked in tmp/.../<lineage>/motif_params.json).
   # Final network is written directly from TF_to_gene output (`tg_adj.tsv`).
   # In lineage_vs_rest mode, the script auto-generates:
   #   <region-set-root>/<lineage>/lineage_vs_rest/lineage_vs_rest.bed

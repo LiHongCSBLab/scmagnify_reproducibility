@@ -62,7 +62,7 @@ methods:
   #     - "--region-set-root"
   #     - "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/benchmark/data/scenicplus_region_sets/t-cell-depleted-bm_benchmark"
   #     - "--region-set-mode"
-  #     - "lineage_vs_rest"
+  #     - "lineage_open"
   #     - "--region-fdr"
   #     - "0.05"
   #     - "--region-min-logfc"
@@ -78,6 +78,8 @@ methods:
   # Final network is written directly from TF_to_gene output (`tg_adj.tsv`).
   # In lineage_vs_rest mode, the script auto-generates:
   #   <region-set-root>/<lineage>/lineage_vs_rest/lineage_vs_rest.bed
+  # In lineage_open mode, the script auto-generates:
+  #   <region-set-root>/<lineage>/lineage_open/lineage_open.bed
   # Manual mode is still supported as:
   #   <region-set-root>/<lineage>/set_01/set_01.bed
 

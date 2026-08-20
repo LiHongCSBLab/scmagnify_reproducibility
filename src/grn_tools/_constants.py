@@ -11,12 +11,15 @@ DATA_DIR = "/mnt/TrueNas/project/chenxufeng/Data/"
 
 DATASETS = {"PMID36973557_NatBiotechnol2023_CD34":['240921',['Ery', 'Mono', 'CLP', 'Mega', 'cDC', 'pDC']],
             "PMID36973557_NatBiotechnol2023_T-cell-depleted": ['240704', ['Ery', 'Mono', 'NaiveB']],
-            "bioRxiv_Klein2023_Pancreas": ['240914', ['Alpha', 'Beta', 'Delta', 'Epsilon']]}
+            "bioRxiv_Klein2023_Pancreas": ['240914', ['Alpha', 'Beta', 'Delta', 'Epsilon']],
+            "PMID33098772_Cell2020_Skin": ['240914', ['Cortex', 'IRS', 'Medulla']]}
 
 
 DIRPJTHOMES = {
     "PMID36973557_NatBiotechnol2023_CD34": "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_CD34/",
     "PMID36973557_NatBiotechnol2023_T-cell-depleted": "/mnt/TrueNas/project/chenxufeng/Data/PMID36973557_NatBiotechnol2023_T-cell-depleted/",
+    "bioRxiv_Klein2023_Pancreas": "/mnt/TrueNas/project/chenxufeng/Data/bioRxiv_Klein2023_Pancreas/",
+    "PMID33098772_Cell2020_Skin": "/mnt/TrueNas/project/chenxufeng/Data/PMID33098772_Cell2020_Skin/"
 }
 
 
@@ -25,7 +28,8 @@ GT_DIR = "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/"
 TISSUE_MAPPING = {
     "PMID36973557_NatBiotechnol2023_CD34": "BoneMarrowHemato",
     "PMID36973557_NatBiotechnol2023_T-cell-depleted": "BoneMarrowHemato",
-    "bioRxiv_Klein2023_Pancreas": "PancreaticEndo"
+    "bioRxiv_Klein2023_Pancreas": "PancreaticEndo",
+    "PMID33098772_Cell2020_Skin": "Skin",
 }
 
 GROUNDTRUTHS_LINEAGE = {
@@ -50,10 +54,14 @@ GROUNDTRUTHS_TISSUE = {
     ("PMID36973557_NatBiotechnol2023_T-cell-depleted", "Ery"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Human_Factor_hg38/BoneMarrowHemato/Cistrome_human_factor_Blood_top1000_network.csv",
     ("PMID36973557_NatBiotechnol2023_T-cell-depleted", "Mono"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Human_Factor_hg38/BoneMarrowHemato/Cistrome_human_factor_Blood_top1000_network.csv",
     ("PMID36973557_NatBiotechnol2023_T-cell-depleted", "NaiveB"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Human_Factor_hg38/BoneMarrowHemato/Cistrome_human_factor_Blood_top1000_network.csv",
-    ("bioRxiv_Klein2023_Pancreas", "Alpha"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndo/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
-    ("bioRxiv_Klein2023_Pancreas", "Beta"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndo/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
-    ("bioRxiv_Klein2023_Pancreas", "Delta"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndo/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
-    ("bioRxiv_Klein2023_Pancreas", "Epsilon"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndo/Cistrome_mouse_factor_Pancreas_top1000_network.csv"
+    ("bioRxiv_Klein2023_Pancreas", "Alpha"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndoBroad/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
+    ("bioRxiv_Klein2023_Pancreas", "Beta"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndoBroad/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
+    ("bioRxiv_Klein2023_Pancreas", "Delta"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndoBroad/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
+    ("bioRxiv_Klein2023_Pancreas", "Epsilon"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/PancreaticEndoBroad/Cistrome_mouse_factor_Pancreas_top1000_network.csv",
+    ("PMID33098772_Cell2020_Skin", "Cortex"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/SkinBroad/Cistrome_mouse_factor_Skin_top1000_network.csv",
+    ("PMID33098772_Cell2020_Skin", "IRS"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/SkinBroad/Cistrome_mouse_factor_Skin_top1000_network.csv",
+    ("PMID33098772_Cell2020_Skin", "Medulla"): "/mnt/TrueNas/project/chenxufeng/Database/CistromeDB/Mouse_Factor_mm10/SkinBroad/Cistrome_mouse_factor_Skin_top1000_network.csv",
+    
 }
 
 
@@ -108,13 +116,15 @@ METHOD_PALETTE_CISTROME = {
     "SINCERITIES": "#17becf",
     "GRNBoost2": "#CC7061",
     "Pando": "#9471C9",
-    "LINGER": "#8c564b"
+    "LINGER": "#8c564b",
+    "SCENICPLUS": "#e6194B",
 }
 
 METHOD_ORDER_CISTROME = [
     "scMagnify", 
     "scMagnify-nobasal", 
     "BasalGRN",
+    "SCENICPLUS",
     "LINGER",
     "Dictys", 
     "CellOracle", 

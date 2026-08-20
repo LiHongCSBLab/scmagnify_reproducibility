@@ -17,11 +17,13 @@ Required region-set layout:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import pathlib
 import re
 import shutil
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Iterable
@@ -62,6 +64,8 @@ STAGE_EGRN = "egrn"
 STAGE_FINAL = "final"
 REGION_SET_MODE_MANUAL = "manual"
 REGION_SET_MODE_LINEAGE_VS_REST = "lineage_vs_rest"
+REGION_SET_MODE_LINEAGE_OPEN = "lineage_open"
+MOTIF_PARAMS_FILENAME = "motif_params.json"
 ALL_STAGES = (
     STAGE_PREPARE,
     STAGE_SEARCH_SPACE,
@@ -156,23 +160,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--region-set-mode",
         dest="region_set_mode",
-        choices=[REGION_SET_MODE_MANUAL, REGION_SET_MODE_LINEAGE_VS_REST],
+        choices=[REGION_SET_MODE_MANUAL, REGION_SET_MODE_LINEAGE_VS_REST, REGION_SET_MODE_LINEAGE_OPEN],
         default=REGION_SET_MODE_MANUAL,
-        help="How region sets are supplied: use existing nested BED files (`manual`) or generate one lineage-vs-rest BED with scanpy (`lineage_vs_rest`)",
+        help=(
+            "How region sets are supplied: use existing nested BED files (`manual`), "
+            "generate differential lineage-vs-rest BED with scanpy (`lineage_vs_rest`), "
+            "or keep lineage-open peaks (`lineage_open`)."
+        ),
     )
     parser.add_argument(
         "--region-fdr",
         dest="region_fdr",
         type=float,
         default=0.05,
-        help="Recommended adjusted p-value cutoff for lineage-vs-rest peak selection (default: 0.05)",
+        help="Adjusted p-value cutoff for lineage-vs-rest peak selection (default: 0.05); used only when --region-set-mode lineage_vs_rest",
     )
     parser.add_argument(
         "--region-min-logfc",
         dest="region_min_logfc",
         type=float,
         default=0.0,
-        help="Minimum log fold-change for lineage-vs-rest peak selection (default: 0.0)",
+        help="Minimum log fold-change for lineage-vs-rest peak selection (default: 0.0); used only when --region-set-mode lineage_vs_rest",
     )
     parser.add_argument(
         "--scenicplus-db-root",
@@ -180,6 +188,23 @@ def parse_args() -> argparse.Namespace:
         type=pathlib.Path,
         default=None,
         help="Root directory containing SCENIC+ reference resources such as genome_annotation.tsv, chromsizes.tsv, rankings feather, and motif annotations",
+    )
+    parser.add_argument(
+        "--auc-threshold",
+        dest="auc_threshold",
+        type=float,
+        default=0.005,
+        help=(
+            "cisTarget AUC window as a fraction of ranked regions (0, 1]; "
+            "default 0.005 = top 0.5%% of the database"
+        ),
+    )
+    parser.add_argument(
+        "--nes-threshold",
+        dest="nes_threshold",
+        type=float,
+        default=3.0,
+        help="Minimum NES for calling enriched motifs in motif_enrichment_cistarget (default: 3.0)",
     )
     parser.add_argument("--threads", dest="threads", type=int, default=16, help="Number of threads for SCENIC+ CLI steps")
     parser.add_argument("--ext", dest="ext", type=int, default=250000, help="Search-space extension passed to SCENIC+")
@@ -267,6 +292,43 @@ def log_stage_decision(lineage: str, stage: str, action: str, reason: str) -> No
     logging.info("[%s] %s %s (%s)", lineage, stage.upper(), action.upper(), reason)
 
 
+def validate_motif_thresholds(auc_threshold: float, nes_threshold: float) -> None:
+    if not 0.0 < auc_threshold <= 1.0:
+        raise ValueError(f"--auc-threshold must be within (0, 1], got {auc_threshold}")
+    if nes_threshold <= 0:
+        raise ValueError(f"--nes-threshold must be > 0, got {nes_threshold}")
+
+
+def motif_run_params(args: argparse.Namespace) -> dict[str, float]:
+    return {
+        "auc_threshold": float(args.auc_threshold),
+        "nes_threshold": float(args.nes_threshold),
+    }
+
+
+def read_stage_params(path: pathlib.Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError:
+        logging.warning("Ignoring invalid stage params file: %s", path)
+        return None
+
+
+def write_stage_params(path: pathlib.Path, params: dict) -> None:
+    path.write_text(json.dumps(params, indent=2, sort_keys=True) + "\n")
+
+
+def stage_params_stale(path: pathlib.Path, expected: dict, *, outputs_exist: bool) -> bool:
+    if not outputs_exist:
+        return False
+    saved = read_stage_params(path)
+    if saved is None:
+        return True
+    return saved != expected
+
+
 def read_optional_csv(path: pathlib.Path, columns: list[str], **kwargs) -> pd.DataFrame:
     if path.exists():
         return pd.read_csv(path, **kwargs)
@@ -319,6 +381,60 @@ def validate_region_set_dir(region_set_dir: pathlib.Path, lineage: str) -> pathl
     return region_set_dir
 
 
+def resolve_motif_region_set_folder(
+    *,
+    lineage_root: pathlib.Path,
+    lineage: str,
+    region_set_mode: str,
+    staging_parent: pathlib.Path,
+) -> pathlib.Path:
+    """Return a region-set folder for cisTarget containing only the active mode.
+
+    scenicplus scans every subfolder under ``region_set_folder``. When both
+    ``lineage_open`` and ``lineage_vs_rest`` exist under the lineage root, it
+    would run both and append twice to the same HDF5. For auto-generated modes
+    we stage a directory with a single symlinked subfolder.
+    """
+    if region_set_mode == REGION_SET_MODE_MANUAL:
+        return validate_region_set_dir(lineage_root, lineage)
+
+    mode_dir = lineage_root / region_set_mode
+    expected_bed = mode_dir / f"{region_set_mode}.bed"
+    if not expected_bed.exists():
+        raise FileNotFoundError(
+            f"Region set BED does not exist for lineage {lineage} ({region_set_mode}): {expected_bed}"
+        )
+
+    staging = staging_parent / f"region_sets_motif_{region_set_mode}"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True, exist_ok=True)
+    link_path = staging / region_set_mode
+    if link_path.exists() or link_path.is_symlink():
+        link_path.unlink()
+    link_path.symlink_to(mode_dir, target_is_directory=True)
+    logging.info("[%s] Motif region-set folder (active mode only): %s", lineage, staging)
+    return validate_region_set_dir(staging, lineage)
+
+
+def _subprocess_env_with_hdf5_nfs_compat() -> dict[str, str]:
+    env = os.environ.copy()
+    # TrueNas/NFS often fails HDF5 flock on append ("Resource temporarily unavailable").
+    env["HDF5_USE_FILE_LOCKING"] = "FALSE"
+    return env
+
+
+def _local_cistarget_output_path(lineage: str) -> pathlib.Path:
+    return pathlib.Path(tempfile.gettempdir()) / f"scenicplus_{lineage}_{os.getpid()}_cistarget.hdf5"
+
+
+def _install_cistarget_output(local_h5: pathlib.Path, destination: pathlib.Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        destination.unlink()
+    shutil.move(str(local_h5), str(destination))
+
+
 def parse_region_name(region: str) -> tuple[str, int, int]:
     text = str(region).strip().replace(":", "-", 1)
     match = re.fullmatch(r"(.+)-(\d+)-(\d+)", text)
@@ -366,6 +482,16 @@ def _load_full_atac_adata(input_path: pathlib.Path, input_type: str) -> ad.AnnDa
     if sp.issparse(atac.X):
         atac.X = atac.X.tocsr()
     return atac
+
+
+def _lineage_open_peak_names(atac_lineage: ad.AnnData) -> pd.Index:
+    x = atac_lineage.X
+    if sp.issparse(x):
+        # sparse matrix keeps this fast for large peak spaces
+        open_mask = np.asarray((x > 0).sum(axis=0)).ravel() > 0
+    else:
+        open_mask = np.asarray(x > 0).sum(axis=0).ravel() > 0
+    return pd.Index(atac_lineage.var_names[open_mask].astype(str))
 
 
 def filter_lineage_vs_rest_markers(rank_df: pd.DataFrame, *, fdr: float, min_logfc: float) -> pd.DataFrame:
@@ -464,6 +590,67 @@ def build_lineage_vs_rest_region_set(
         bed_df.shape[0],
         fdr,
         min_logfc,
+    )
+    return lineage_root
+
+
+def build_lineage_open_region_set(
+    *,
+    input_data: pathlib.Path,
+    input_type: str,
+    lineage: str,
+    cell_selected: pd.DataFrame,
+    region_set_root: pathlib.Path,
+    overwrite: bool,
+) -> pathlib.Path:
+    lineage_root = _lineage_region_root(region_set_root, lineage)
+    set_dir = lineage_root / REGION_SET_MODE_LINEAGE_OPEN
+    bed_path = set_dir / f"{REGION_SET_MODE_LINEAGE_OPEN}.bed"
+    metadata_path = set_dir / "metadata.csv"
+
+    if bed_path.exists() and not overwrite:
+        return lineage_root
+    if set_dir.exists() and overwrite:
+        shutil.rmtree(set_dir)
+    set_dir.mkdir(parents=True, exist_ok=True)
+
+    atac = _load_full_atac_adata(input_data, input_type)
+    shared_cells = atac.obs_names.intersection(cell_selected.index)
+    if shared_cells.empty:
+        raise ValueError(f"No cells in the ATAC object overlap the cell mask for lineage {lineage}")
+
+    warn_mask_issues(cell_selected, lineage)
+    lineage_mask = _truthy_mask(cell_selected.reindex(shared_cells)[lineage].fillna(False))
+    n_lineage = int(lineage_mask.sum())
+    n_rest = int((~lineage_mask).sum())
+    if n_lineage == 0:
+        raise ValueError(f"No lineage cells are available to build a lineage-open region set for {lineage}")
+
+    atac = atac[shared_cells].copy()
+    atac_lineage = atac[lineage_mask.values].copy()
+    if atac_lineage.n_obs == 0:
+        raise ValueError(f"No lineage cells remain after alignment for {lineage}")
+
+    open_peak_names = _lineage_open_peak_names(atac_lineage)
+    if open_peak_names.empty:
+        raise ValueError(f"No open peaks found within lineage cells for {lineage}")
+
+    bed_df = region_index_to_bed(open_peak_names.unique())
+    bed_df.to_csv(bed_path, sep="\t", header=False, index=False)
+    pd.DataFrame(
+        [
+            {"key": "mode", "value": REGION_SET_MODE_LINEAGE_OPEN},
+            {"key": "lineage", "value": lineage},
+            {"key": "n_lineage_cells", "value": str(n_lineage)},
+            {"key": "n_rest_cells", "value": str(n_rest)},
+            {"key": "selection_logic", "value": "keep peaks with non-zero accessibility in lineage cells"},
+            {"key": "n_selected_regions", "value": str(bed_df.shape[0])},
+        ]
+    ).to_csv(metadata_path, index=False)
+    logging.info(
+        "[%s] Generated lineage-open region set with %d regions (kept peaks with non-zero accessibility in lineage cells)",
+        lineage,
+        bed_df.shape[0],
     )
     return lineage_root
 
@@ -570,10 +757,12 @@ def resolve_and_prepare_region_set_root(args: argparse.Namespace) -> pathlib.Pat
         else:
             region_set_root = args.dirPjtHome / "benchmark" / "data" / "scenicplus_region_sets" / args.dataset
 
-    if args.region_set_mode == REGION_SET_MODE_LINEAGE_VS_REST and not region_set_root.exists():
+    auto_build_modes = {REGION_SET_MODE_LINEAGE_VS_REST, REGION_SET_MODE_LINEAGE_OPEN}
+    if args.region_set_mode in auto_build_modes and not region_set_root.exists():
         region_set_root.mkdir(parents=True, exist_ok=True)
         logging.info(
-            "Created missing region-set root for lineage_vs_rest mode: %s",
+            "Created missing region-set root for %s mode: %s",
+            args.region_set_mode,
             region_set_root,
         )
 
@@ -581,7 +770,9 @@ def resolve_and_prepare_region_set_root(args: argparse.Namespace) -> pathlib.Pat
 
 
 def main(args: argparse.Namespace) -> None:
+    validate_motif_thresholds(args.auc_threshold, args.nes_threshold)
     force_rebuild = normalize_force_rebuild(args.force_rebuild)
+    current_motif_params = motif_run_params(args)
 
     benchmark_dir = args.dirPjtHome / "benchmark" / args.version
     tmp_save_dir = args.dirPjtHome / "tmp" / "scenicplus_wd" / args.version
@@ -615,10 +806,15 @@ def main(args: argparse.Namespace) -> None:
     logging.info("Region set root: %s", region_set_root)
     logging.info("Skipping pycisTopic, MALLET, DAR generation, and DEM motif enrichment")
     logging.info(
-        "Region-set mode: %s (recommended lineage-vs-rest filter: FDR <= %.3g, logFC > %.3g)",
+        "Region-set mode: %s (lineage_vs_rest uses differential filters FDR <= %.3g and logFC > %.3g; lineage_open ignores these thresholds)",
         args.region_set_mode,
         args.region_fdr,
         args.region_min_logfc,
+    )
+    logging.info(
+        "cisTarget motif thresholds: auc_threshold=%.6g, nes_threshold=%.6g",
+        args.auc_threshold,
+        args.nes_threshold,
     )
 
     gene_selected = pd.read_csv(args.genelist, header=None)[0].astype(str)
@@ -670,7 +866,22 @@ def main(args: argparse.Namespace) -> None:
                     min_logfc=args.region_min_logfc,
                     overwrite=(not args.resume) or (STAGE_MOTIF in force_rebuild),
                 )
-            region_set_dir = validate_region_set_dir(_lineage_region_set_dir(region_set_root, lineage), lineage)
+            elif args.region_set_mode == REGION_SET_MODE_LINEAGE_OPEN:
+                build_lineage_open_region_set(
+                    input_data=input_data,
+                    input_type=input_type,
+                    lineage=lineage,
+                    cell_selected=cell_selected,
+                    region_set_root=region_set_root,
+                    overwrite=(not args.resume) or (STAGE_MOTIF in force_rebuild),
+                )
+            lineage_region_root = _lineage_region_set_dir(region_set_root, lineage)
+            region_set_dir = resolve_motif_region_set_folder(
+                lineage_root=lineage_region_root,
+                lineage=lineage,
+                region_set_mode=args.region_set_mode,
+                staging_parent=artifacts.lineage_dir,
+            )
 
             search_space_action = decide_stage_action(
                 stage=STAGE_SEARCH_SPACE,
@@ -739,40 +950,76 @@ def main(args: argparse.Namespace) -> None:
                 ensure_outputs_exist(stage_outputs(artifacts, STAGE_REGION_TO_GENE), STAGE_REGION_TO_GENE)
                 upstream_changed = True
 
+            motif_params_path = artifacts.lineage_dir / MOTIF_PARAMS_FILENAME
+            motif_outputs_exist = outputs_ready(stage_outputs(artifacts, STAGE_MOTIF))
+            motif_params_stale = lineage_resume and stage_params_stale(
+                motif_params_path,
+                current_motif_params,
+                outputs_exist=motif_outputs_exist,
+            )
+            if motif_params_stale:
+                saved = read_stage_params(motif_params_path)
+                logging.info(
+                    "[%s] MOTIF params changed (saved=%s, current=%s); rebuilding motif and downstream stages",
+                    lineage,
+                    saved,
+                    current_motif_params,
+                )
             motif_action = decide_stage_action(
                 stage=STAGE_MOTIF,
                 outputs_exist=outputs_ready(stage_outputs(artifacts, STAGE_MOTIF)),
                 resume=lineage_resume,
-                upstream_changed=upstream_changed,
+                upstream_changed=upstream_changed or motif_params_stale,
                 force_rebuild=force_rebuild,
             )
-            log_stage_decision(lineage, STAGE_MOTIF, motif_action, "checkpoint inspection")
+            log_stage_decision(
+                lineage,
+                STAGE_MOTIF,
+                motif_action,
+                "checkpoint inspection" if not motif_params_stale else "motif threshold params changed",
+            )
             if motif_action != "skip":
-                run_logged_command(
-                    [
-                        "scenicplus",
-                        "grn_inference",
-                        "motif_enrichment_cistarget",
-                        "--region_set_folder",
-                        str(region_set_dir),
-                        "--cistarget_db_fname",
-                        str(resources.rankings_feather),
-                        "--output_fname_cistarget_result",
-                        str(artifacts.cistarget),
-                        "--path_to_motif_annotations",
-                        str(resources.motif_annotation_tsv),
-                        "--annotations_to_use",
-                        "Direct_annot",
-                        "Orthology_annot",
-                        "--temp_dir",
-                        os.environ.get("TMPDIR", "/tmp"),
-                        "--species",
-                        resources.species,
-                        "--n_cpu",
-                        str(args.threads),
-                    ]
-                )
+                local_cistarget = _local_cistarget_output_path(lineage)
+                if local_cistarget.exists():
+                    local_cistarget.unlink()
+                if artifacts.cistarget.exists():
+                    artifacts.cistarget.unlink()
+                try:
+                    run_logged_command(
+                        [
+                            "scenicplus",
+                            "grn_inference",
+                            "motif_enrichment_cistarget",
+                            "--region_set_folder",
+                            str(region_set_dir),
+                            "--cistarget_db_fname",
+                            str(resources.rankings_feather),
+                            "--output_fname_cistarget_result",
+                            str(local_cistarget),
+                            "--path_to_motif_annotations",
+                            str(resources.motif_annotation_tsv),
+                            "--auc_threshold",
+                            str(args.auc_threshold),
+                            "--nes_threshold",
+                            str(args.nes_threshold),
+                            "--annotations_to_use",
+                            "Direct_annot",
+                            "Orthology_annot",
+                            "--temp_dir",
+                            os.environ.get("TMPDIR", "/tmp"),
+                            "--species",
+                            resources.species,
+                            "--n_cpu",
+                            str(args.threads),
+                        ],
+                        env=_subprocess_env_with_hdf5_nfs_compat(),
+                    )
+                    _install_cistarget_output(local_cistarget, artifacts.cistarget)
+                finally:
+                    if local_cistarget.exists():
+                        local_cistarget.unlink()
                 ensure_outputs_exist(stage_outputs(artifacts, STAGE_MOTIF), STAGE_MOTIF)
+                write_stage_params(motif_params_path, current_motif_params)
                 upstream_changed = True
 
             menr_action = decide_stage_action(

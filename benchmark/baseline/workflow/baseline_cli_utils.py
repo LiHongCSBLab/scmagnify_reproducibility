@@ -29,9 +29,20 @@ def log_memory_usage() -> None:
     logging.info("Memory usage: %.2f MB", memory_info.rss / 1024 ** 2)
 
 
-def run_logged_command(cmd: list[str], *, cwd: Optional[Path] = None) -> None:
+def run_logged_command(
+    cmd: list[str],
+    *,
+    cwd: Optional[Path] = None,
+    env: Optional[dict[str, str]] = None,
+) -> None:
     logging.info("Running command: %s", " ".join(map(str, cmd)))
-    result = subprocess.run(cmd, cwd=str(cwd) if cwd else None, text=True, capture_output=True)
+    result = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
     if result.stdout:
         logging.info(result.stdout)
     if result.stderr:

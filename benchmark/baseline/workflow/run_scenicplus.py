@@ -216,11 +216,30 @@ def _prepare_scenicplus_mudata(mdata: mu.MuData) -> mu.MuData:
 
 
 def _discover_search_space_subcommand() -> str:
-    for name in ["search_spance", "search_space"]:
-        result = subprocess.run(["scenicplus", "prepare_data", name, "--help"], capture_output=True, text=True)
-        if result.returncode == 0:
+    help_result = subprocess.run(
+        ["scenicplus", "prepare_data", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    help_text = f"{help_result.stdout}\n{help_result.stderr}".lower()
+    for name in ["search_space", "search_spance"]:
+        if name in help_text:
             return name
-    raise RuntimeError("Could not find scenicplus prepare_data search_spance/search_space subcommand")
+
+    for name in ["search_space", "search_spance"]:
+        result = subprocess.run(
+            ["scenicplus", "prepare_data", name, "--help"],
+            capture_output=True,
+            text=True,
+        )
+        combined_text = f"{result.stdout}\n{result.stderr}".lower()
+        if result.returncode != 0:
+            continue
+        if "no such command" in combined_text or "invalid choice" in combined_text:
+            continue
+        return name
+
+    raise RuntimeError("Could not find scenicplus prepare_data search_space/search_spance subcommand")
 
 
 def _format_region_to_gene_output(rg_adj_path: pathlib.Path) -> pd.DataFrame:

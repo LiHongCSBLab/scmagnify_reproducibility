@@ -50,6 +50,7 @@ class GRNEvaluator:
         self.accuracy_details = []  # List of dicts with detailed results, including curve data
         self.metric_statistics = None  # DataFrame storing paired statistical tests
         self.stability_results = {}  # Stores stability metric results (e.g., Jaccard, Cosine)
+        self.degree_rank_results = None  # DataFrame storing degree centrality rank correlations
         self.console = Console()  # Rich console for pretty printing
         self.algo_palette = METHOD_PALETTE_CISTROME  # Default color palette for algorithms
         self.gene_filter = []
@@ -58,6 +59,156 @@ class GRNEvaluator:
     def __repr__(self):
         """String representation of the Evaluator instance."""
         return f"<GRNEvaluator: {len(self.networks)} networks loaded, {len(self.groundtruths)} ground truths>"
+
+    @staticmethod
+    def _default_accuracy_dedup_subset() -> List[str]:
+        """Columns that uniquely identify one summary accuracy result."""
+        return ["Algorithm", "Dataset", "Lineage", "Seed"]
+
+    @staticmethod
+    def _normalize_accuracy_results(df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize historical metrics CSVs to the current accuracy schema."""
+        normalized = df.copy()
+        rename_map = {
+            "F1 Score(topk)": "F1 Score (topk)",
+            "F0.1 Score(topk)": "F0.1 Score (topk)",
+            "F1 Score(max)": "F1 Score (max)",
+            "F0.1 Score(max)": "F0.1 Score (max)",
+        }
+        normalized.rename(
+            columns={k: v for k, v in rename_map.items() if k in normalized.columns},
+            inplace=True,
+        )
+
+        if "Seed" not in normalized.columns:
+            normalized["Seed"] = 0
+        normalized["Seed"] = pd.to_numeric(normalized["Seed"], errors="coerce").fillna(0).astype(int)
+
+        return normalized
+
+    @classmethod
+    def _load_accuracy_results_source(
+        cls,
+        source: Union[pd.DataFrame, str],
+        normalize_schema: bool = True,
+    ) -> pd.DataFrame:
+        """Load accuracy results from a CSV path or DataFrame."""
+        if isinstance(source, pd.DataFrame):
+            results = source.copy()
+        elif isinstance(source, str):
+            results = pd.read_csv(source)
+        else:
+            raise TypeError("Accuracy results source must be a pandas DataFrame or CSV path string.")
+
+        if normalize_schema:
+            results = cls._normalize_accuracy_results(results)
+        return results
+
+    @staticmethod
+    def _result_key(row: Union[pd.Series, Dict], subset: List[str]) -> Tuple:
+        """Create a stable key for skipping and de-duplicating accuracy rows."""
+        key = []
+        for col in subset:
+            value = row.get(col, None)
+            if col == "Seed" and pd.notna(value):
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    pass
+            key.append(value)
+        return tuple(key)
+
+    def load_accuracy_results(
+        self,
+        source: Union[pd.DataFrame, str],
+        normalize_schema: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Load summary accuracy metrics from a CSV file or DataFrame.
+
+        This is useful when downstream plotting/statistics should reuse a persisted
+        metrics table without reloading and re-evaluating the original GRN files.
+        """
+        self.accuracy_results = self._load_accuracy_results_source(
+            source,
+            normalize_schema=normalize_schema,
+        )
+        self.console.print(f"[green]Loaded accuracy results:[/] {len(self.accuracy_results)} rows.")
+        return self.accuracy_results
+
+    def save_accuracy_results(
+        self,
+        csv_path: str,
+        deduplicate: bool = True,
+        dedup_subset: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
+        """Save current summary accuracy metrics to CSV."""
+        if self.accuracy_results is None:
+            raise ValueError("No accuracy results found. Run `calculate_accuracy()` or `load_accuracy_results()` first.")
+
+        results = self._normalize_accuracy_results(self.accuracy_results)
+        if deduplicate:
+            dedup_subset = dedup_subset or self._default_accuracy_dedup_subset()
+            missing_columns = [col for col in dedup_subset if col not in results.columns]
+            if missing_columns:
+                raise ValueError(f"Cannot deduplicate accuracy results; missing columns: {missing_columns}")
+            results = results.drop_duplicates(subset=dedup_subset, keep="last")
+
+        os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
+        results.to_csv(csv_path, index=False)
+        self.accuracy_results = results
+        self.console.print(f"[green]Saved accuracy results:[/] {csv_path} ({len(results)} rows).")
+        return self.accuracy_results
+
+    def _merge_accuracy_results(
+        self,
+        existing_df: Optional[pd.DataFrame],
+        new_results_df: pd.DataFrame,
+        dedup_subset: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
+        """Merge existing and newly computed summary metrics."""
+        frames = []
+        if existing_df is not None and not existing_df.empty:
+            frames.append(self._normalize_accuracy_results(existing_df))
+        if new_results_df is not None and not new_results_df.empty:
+            frames.append(self._normalize_accuracy_results(new_results_df))
+
+        if not frames:
+            return pd.DataFrame()
+
+        final_df = pd.concat(frames, ignore_index=True)
+        dedup_subset = dedup_subset or self._default_accuracy_dedup_subset()
+        missing_columns = [col for col in dedup_subset if col not in final_df.columns]
+        if missing_columns:
+            self.console.print(
+                f"[yellow]Warning: Cannot deduplicate accuracy results; missing columns: {missing_columns}.[/]"
+            )
+            return final_df
+
+        return final_df.drop_duplicates(subset=dedup_subset, keep="last")
+
+    @staticmethod
+    def _parse_network_filename(filename: str) -> Optional[Tuple[str, str, int]]:
+        """
+        Parse a network CSV filename into algorithm, lineage, and seed.
+
+        Supported formats:
+        - ``{algo}_{lineage}.csv`` -> seed=0
+        - ``{algo}_{lineage}_seed{N}.csv`` -> seed=N
+        """
+        stem = filename[:-4] if filename.lower().endswith(".csv") else filename
+
+        seed = 0
+        seed_match = re.match(r"(.+)_seed(\d+)$", stem)
+        if seed_match:
+            stem = seed_match.group(1)
+            seed = int(seed_match.group(2))
+
+        algo_lineage_match = re.match(r"(.+)_([^_]+)$", stem)
+        if not algo_lineage_match:
+            return None
+
+        return algo_lineage_match.group(1), algo_lineage_match.group(2), seed
 
     def load_grns(
         self,
@@ -114,17 +265,24 @@ class GRNEvaluator:
                     self.console.print(f"[red]Error: Invalid regex pattern '{regex}': {e}[/]")
                     return
             
-            # Define the regex pattern to extract algorithm and lineage from filenames
-            parsing_pattern = re.compile(r"(.+)_([^_]+)\.csv$")
             loaded_count = 0
             
             for filename in track(filenames, description=f"⚙️[bold cyan]Scanning '{dataset}'..."):
-                match = parsing_pattern.match(filename)
-                if match:
-                    parsed_algo, parsed_lineage = match.groups()
+                parsed = self._parse_network_filename(filename)
+                if parsed:
+                    parsed_algo, parsed_lineage, parsed_seed = parsed
                     file_path = os.path.join(directory_path, filename)
                     # Use the internal helper to add the network
-                    self._add_single_network(file_path, parsed_algo, dataset, parsed_lineage, tf_filter=tf_filter, verbose=False, **kwargs)
+                    self._add_single_network(
+                        file_path,
+                        parsed_algo,
+                        dataset,
+                        parsed_lineage,
+                        seed=parsed_seed,
+                        tf_filter=tf_filter,
+                        verbose=False,
+                        **kwargs,
+                    )
                     loaded_count += 1
                         
             self.console.print(f"✅Scan complete. Loaded [bold]{loaded_count}[/] networks from '{directory_path}'.")
@@ -149,6 +307,7 @@ class GRNEvaluator:
         algo: str,
         dataset: str,
         lineage: str,
+        seed: int = 0,
         tf_filter: Optional[List[str]] = None,
         verbose: bool = True,
         **kwargs,
@@ -162,6 +321,7 @@ class GRNEvaluator:
         algo (str): The algorithm name.
         dataset (str): The dataset name.
         lineage (str): The lineage name.
+        seed (int): Random seed associated with the network. Defaults to 0 when not specified.
         verbose (bool): If True, prints a confirmation message upon successful addition.
         **kwargs: Additional metadata.
 
@@ -194,11 +354,14 @@ class GRNEvaluator:
                 network_df = network_df[network_df["TF"].isin(tf_filter)]
 
             # Combine provided metadata and any extra kwargs
-            meta = {"Algorithm": algo, "Dataset": dataset, "Lineage": lineage, **kwargs}
+            meta = {"Algorithm": algo, "Dataset": dataset, "Lineage": lineage, "Seed": seed, **kwargs}
             # Append the structured network data to the main list
             self.networks.append({"meta": meta, "data": network_df})
             if verbose:
-                self.console.print(f"[green]Added network:[/] Algorithm='{algo}', Dataset='{dataset}', Lineage='{lineage}'")
+                self.console.print(
+                    f"[green]Added network:[/] Algorithm='{algo}', Dataset='{dataset}', "
+                    f"Lineage='{lineage}', Seed={meta['Seed']}"
+                )
 
             self.union_tf_list = list(set().union(*(net["data"]["TF"].unique() for net in self.networks)))
             self.union_tg_list = list(set().union(*(net["data"]["Target"].unique() for net in self.networks)))
@@ -354,16 +517,22 @@ class GRNEvaluator:
             info = self.get_network_info(net["data"])
             meta = net["meta"]
             # Combine metadata and network stats into a single dictionary for the row
-            table_data.append({"Algorithm": meta["Algorithm"], "Dataset": meta["Dataset"], "Lineage": meta["Lineage"], **info})
+            table_data.append({
+                "Algorithm": meta["Algorithm"],
+                "Dataset": meta["Dataset"],
+                "Lineage": meta["Lineage"],
+                "Seed": meta.get("Seed", 0),
+                **info,
+            })
 
         if sort_by:
-            valid_keys = ["Algorithm", "Dataset", "Lineage", "Edges", "Nodes", "TFs", "Targets"]
+            valid_keys = ["Algorithm", "Dataset", "Lineage", "Seed", "Edges", "Nodes", "TFs", "Targets"]
             if sort_by not in valid_keys:
                 self.console.print(f"[red]Error: Invalid sort_by key '{sort_by}'. Valid keys are: {valid_keys}[/]")
                 return
             
             # Sort numerically for stats columns and alphabetically otherwise
-            is_numeric_sort = sort_by in ["Edges", "Nodes", "TFs", "Targets"]
+            is_numeric_sort = sort_by in ["Seed", "Edges", "Nodes", "TFs", "Targets"]
             table_data.sort(
                 key=lambda x: int(x[sort_by]) if is_numeric_sort else x[sort_by],
                 reverse=not ascending
@@ -371,15 +540,24 @@ class GRNEvaluator:
             
         # Create and format a rich Table
         table = Table(title="Predicted Network Descriptions")
-        for col in ["Algorithm", "Dataset", "Lineage", "Edges", "Nodes", "TFs", "Targets"]:
+        for col in ["Algorithm", "Dataset", "Lineage", "Seed", "Edges", "Nodes", "TFs", "Targets"]:
             table.add_column(
                 col,
                 style="cyan" if col=="Algorithm" else "magenta" if col=="Dataset" else "green" if col=="Lineage" else None,
-                justify="right" if col in ["Edges", "Nodes", "TFs", "Targets"] else "left"
+                justify="right" if col in ["Seed", "Edges", "Nodes", "TFs", "Targets"] else "left"
             )
         
         for row in table_data:
-            table.add_row(row["Algorithm"], row["Dataset"], row["Lineage"], str(row["Edges"]), str(row["Nodes"]), str(row["TFs"]), str(row["Targets"]))
+            table.add_row(
+                row["Algorithm"],
+                row["Dataset"],
+                row["Lineage"],
+                str(row["Seed"]),
+                str(row["Edges"]),
+                str(row["Nodes"]),
+                str(row["TFs"]),
+                str(row["Targets"]),
+            )
         
         self.grn_info = table  # Cache the table object
         self.console.print(self.grn_info)
@@ -489,7 +667,14 @@ class GRNEvaluator:
         matching_indices = meta_df.index
         return [self.networks[i] for i in matching_indices]
         
-    def calculate_accuracy(self, thres_mode: str = "topk", baseline_path: str = None):
+    def calculate_accuracy(
+        self,
+        thres_mode: str = "topk",
+        baseline_path: str = None,
+        existing_results: Union[pd.DataFrame, str] = None,
+        skip_existing: bool = False,
+        dedup_subset: Optional[List[str]] = None,
+    ):
         """
         Calculates accuracy metrics and stores detailed results, including PR and ROC curve data.
 
@@ -504,6 +689,10 @@ class GRNEvaluator:
                           'max' finds the threshold that maximizes the F-score.
                           'topk' sets the threshold to include the top K edges, where K is the number of edges in the ground truth.
         baseline_path (str, optional): Path to a CSV file with existing benchmark results to merge with.
+        existing_results (Union[pd.DataFrame, str], optional): Existing summary metrics used for
+                          merging and, when `skip_existing=True`, skipping already evaluated GRNs.
+        skip_existing (bool): If True, skip networks already present in existing results.
+        dedup_subset (List[str], optional): Columns used to identify duplicate summary rows.
 
         Return:
         -------
@@ -511,12 +700,51 @@ class GRNEvaluator:
         """
         self.accuracy_details = []  # Reset detailed results
         new_results_list = []
+        dedup_subset = dedup_subset or self._default_accuracy_dedup_subset()
+
+        existing_frames = []
+        if self.accuracy_results is not None:
+            existing_frames.append(self._normalize_accuracy_results(self.accuracy_results))
+        if existing_results is not None:
+            existing_frames.append(
+                self._load_accuracy_results_source(existing_results, normalize_schema=True)
+            )
+        if baseline_path:
+            try:
+                self.console.print(f"\n[cyan]Loading baseline results from:[/] {baseline_path}")
+                existing_frames.append(
+                    self._load_accuracy_results_source(baseline_path, normalize_schema=True)
+                )
+            except FileNotFoundError:
+                self.console.print(f"[yellow]Warning: Baseline file not found at '{baseline_path}'. Returning only new results.[/]")
+            except Exception as e:
+                self.console.print(f"[red]Error reading or processing baseline file: {e}. Returning only new results.[/]")
+
+        existing_df = None
+        completed_keys = set()
+        if existing_frames:
+            existing_df = pd.concat(existing_frames, ignore_index=True)
+            existing_df = self._merge_accuracy_results(existing_df, pd.DataFrame(), dedup_subset=dedup_subset)
+            missing_columns = [col for col in dedup_subset if col not in existing_df.columns]
+            if missing_columns:
+                self.console.print(
+                    f"[yellow]Warning: Existing results are missing skip columns {missing_columns}; "
+                    "disabling skip_existing for this run.[/]"
+                )
+                skip_existing = False
+            else:
+                completed_keys = {
+                    self._result_key(row, dedup_subset)
+                    for _, row in existing_df.iterrows()
+                }
 
         for net in track(self.networks, description="[bold green]Calculating Accuracy..."):
             meta, est_grn = net["meta"], net["data"]
             gt_key = (meta["Dataset"], meta["Lineage"])
             # Skip if no corresponding ground truth is loaded
             if gt_key not in self.groundtruths:
+                continue
+            if skip_existing and self._result_key(meta, dedup_subset) in completed_keys:
                 continue
 
             gt_grn = self.groundtruths[gt_key]
@@ -578,24 +806,9 @@ class GRNEvaluator:
 
         new_results_df = pd.DataFrame(new_results_list)
 
-        # --- Baseline file handling ---
-        if baseline_path:
-            try:
-                self.console.print(f"\n[cyan]Loading baseline results from:[/] {baseline_path}")
-                baseline_df = pd.read_csv(baseline_path)
-                # Combine new results with the baseline
-                final_df = pd.concat([baseline_df, new_results_df], ignore_index=True)
-                # Remove duplicates, keeping the most recent results for a given combination
-                final_df.drop_duplicates(subset=["Algorithm", "Dataset", "Lineage"], keep="last", inplace=True)
-                self.console.print("Successfully merged new results with the baseline.")
-            except FileNotFoundError:
-                self.console.print(f"[yellow]Warning: Baseline file not found at '{baseline_path}'. Returning only new results.[/]")
-                final_df = new_results_df
-            except Exception as e:
-                self.console.print(f"[red]Error reading or processing baseline file: {e}. Returning only new results.[/]")
-                final_df = new_results_df
-        else:
-            final_df = new_results_df
+        final_df = self._merge_accuracy_results(existing_df, new_results_df, dedup_subset=dedup_subset)
+        if existing_df is not None:
+            self.console.print("Successfully merged new results with existing accuracy results.")
 
         self.accuracy_results = final_df
         return self.accuracy_results
@@ -856,20 +1069,35 @@ class GRNEvaluator:
 
         return result_df
     
-    def calculate_network_score(self):
+    @staticmethod
+    def _is_scmagnify_algorithm(algorithm: str) -> bool:
+        """Return True for scMagnify and its variants (e.g. scMagnify-nobasal)."""
+        algo = str(algorithm)
+        return algo == "scMagnify" or algo.startswith("scMagnify-")
+
+    def calculate_network_score(
+        self,
+        scmagnify_top_edges: bool = False,
+        scmagnify_quantile: float = 0.90,
+    ):
         """
         Calculates various centrality measures and scores for each loaded network.
 
         For each network in `self.networks`, this method constructs a directed graph
-        and computes several node-level metrics:
-        - Degree Centrality (in, out, and total)
-        - Betweenness Centrality
-        - Closeness Centrality
-        - PageRank
-        - Number of Targets (Out-Degree)
+        and computes node-level metrics (currently degree centrality and out-degree).
+
+        Parameters
+        ----------
+        scmagnify_top_edges : bool
+            If True, scMagnify networks use only edges at or above the score quantile
+            threshold before computing degree metrics. This matches the default
+            ``regulation_inference`` network filter (quantile 0.9, top ~10%% of edges).
+        scmagnify_quantile : float
+            Quantile threshold applied to positive scores when ``scmagnify_top_edges``
+            is True. Default is 0.90, consistent with scMagnify's ``filter_network``.
 
         The results are stored as a DataFrame in a new 'score' key within each
-        network's dictionary (e.g., `self.networks[i]['score']`).
+        network's dictionary (e.g., ``self.networks[i]['score']``).
         """
         if not self.networks:
             self.console.print("[yellow] No networks loaded. Please add networks before calculating scores.[/]")
@@ -879,14 +1107,14 @@ class GRNEvaluator:
             try:
 
                 network_df = net["data"]
-
-                G = nx.from_pandas_edgelist(
-                    network_df,
-                    source="TF",
-                    target="Target",
-                    edge_attr="Score",
-                    create_using=nx.DiGraph(),
+                meta = net.get("meta", {})
+                algo = meta.get("Algorithm", "")
+                score_quantile = (
+                    scmagnify_quantile
+                    if scmagnify_top_edges and self._is_scmagnify_algorithm(algo)
+                    else None
                 )
+                G = self._build_digraph(network_df, score_quantile=score_quantile)
 
                 if G.number_of_nodes() > 0:
                     score_df = self._network_score(G)
@@ -907,6 +1135,233 @@ class GRNEvaluator:
                 self.console.print(f"[red] {algo}/{lineage}  scoring failed: {e}[/]")
 
         self.console.print("✅ Network scoring complete.")
+
+    @staticmethod
+    def _build_digraph(
+        network_df: pd.DataFrame,
+        score_quantile: Optional[float] = None,
+    ) -> nx.DiGraph:
+        """
+        Build a directed graph from a network DataFrame.
+
+        Parameters
+        ----------
+        network_df
+            Edge table with at least ``TF`` and ``Target`` columns.
+        score_quantile
+            If provided, keep only edges with ``Score`` at or above this quantile
+            (computed on positive scores). Matches scMagnify ``filter_network``
+            with ``method='quantile'``.
+        """
+        required = {"TF", "Target"}
+        if not required.issubset(set(network_df.columns)):
+            raise ValueError(f"Network DataFrame must contain columns: {required}")
+        # Normalize node labels to strings so mixed dtypes (e.g., float/str)
+        # won't break downstream set operations/sorting.
+        net_df = network_df.copy()
+        net_df = net_df.dropna(subset=["TF", "Target"])
+        net_df["TF"] = net_df["TF"].astype(str)
+        net_df["Target"] = net_df["Target"].astype(str)
+        edge_attr = "Score" if "Score" in net_df.columns else None
+        if edge_attr is not None:
+            # Match scmagnify GRNMuData.to_nx(): only positive edges enter the graph
+            net_df = net_df[net_df[edge_attr] > 0]
+            if score_quantile is not None:
+                threshold = net_df[edge_attr].quantile(score_quantile)
+                net_df = net_df[net_df[edge_attr] >= threshold]
+        return nx.from_pandas_edgelist(
+            net_df,
+            source="TF",
+            target="Target",
+            edge_attr=edge_attr,
+            create_using=nx.DiGraph(),
+        )
+
+    @staticmethod
+    def _degree_centrality_series(G: nx.DiGraph, nodes: List[str]) -> pd.Series:
+        """
+        Return degree centrality aligned to a fixed node list.
+        """
+        values = nx.degree_centrality(G)
+        return pd.Series(values, dtype=float).reindex(nodes, fill_value=0.0)
+
+    def calculate_degree_rank_correlation(
+        self,
+        node_space: str = "union",
+        plot_heatmap: bool = False,
+        heatmap_metric: str = "SpearmanR",
+        save_heatmap: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """
+        Compare degree-centrality rankings between inferred and ground-truth networks.
+
+        Parameters
+        ----------
+        node_space : str
+            Node space used to align centrality vectors:
+            - "union": use union of inferred/ground-truth nodes (default)
+            - "intersection": use intersection of nodes
+        plot_heatmap : bool
+            Whether to draw a method x lineage heatmap for each dataset.
+        heatmap_metric : str
+            Heatmap value column. One of: "SpearmanR", "KendallTau".
+        save_heatmap : Optional[str]
+            Optional output path prefix. If provided and multiple datasets exist,
+            files are saved as "{prefix}_{dataset}.pdf".
+        """
+        if node_space not in {"union", "intersection"}:
+            raise ValueError("node_space must be 'union' or 'intersection'.")
+
+        if not self.networks:
+            self.console.print("[yellow]No networks loaded. Please add networks first.[/]")
+            return pd.DataFrame()
+        if not self.groundtruths:
+            self.console.print("[yellow]No ground truths loaded. Please run `load_groundtruths()` first.[/]")
+            return pd.DataFrame()
+
+        from scipy.stats import kendalltau, spearmanr
+
+        rows = []
+        n_missing_gt = 0
+        n_skipped = 0
+
+        for net in track(self.networks, description="[bold blue] Calculating Degree Rank Correlations..."):
+            meta = net.get("meta", {})
+            dataset = meta.get("Dataset")
+            lineage = meta.get("Lineage")
+            algo = meta.get("Algorithm")
+            seed = int(meta.get("Seed", 0))
+
+            if not dataset or not lineage:
+                n_skipped += 1
+                continue
+
+            gt_key = (dataset, lineage)
+            if gt_key not in self.groundtruths:
+                n_missing_gt += 1
+                continue
+
+            pred_df = net.get("data", pd.DataFrame())
+            gt_df = self.groundtruths[gt_key]
+            if pred_df.empty or gt_df.empty:
+                n_skipped += 1
+                continue
+
+            G_pred = self._build_digraph(pred_df)
+            G_gt = self._build_digraph(gt_df)
+
+            pred_nodes = set(G_pred.nodes())
+            gt_nodes = set(G_gt.nodes())
+            if node_space == "union":
+                nodes = sorted(pred_nodes | gt_nodes, key=str)
+            else:
+                nodes = sorted(pred_nodes & gt_nodes, key=str)
+
+            if len(nodes) < 2:
+                n_skipped += 1
+                continue
+
+            pred_deg = self._degree_centrality_series(G_pred, nodes)
+            gt_deg = self._degree_centrality_series(G_gt, nodes)
+
+            spearman_r, spearman_p = spearmanr(gt_deg.values, pred_deg.values)
+            kendall_tau, kendall_p = kendalltau(gt_deg.values, pred_deg.values)
+
+            rows.append(
+                {
+                    "Algorithm": algo,
+                    "Dataset": dataset,
+                    "Lineage": lineage,
+                    "Seed": seed,
+                    "NodeSpace": node_space,
+                    "N_Nodes_Compared": int(len(nodes)),
+                    "N_Nodes_Pred": int(len(pred_nodes)),
+                    "N_Nodes_GT": int(len(gt_nodes)),
+                    "SpearmanR": float(spearman_r) if pd.notna(spearman_r) else np.nan,
+                    "SpearmanP": float(spearman_p) if pd.notna(spearman_p) else np.nan,
+                    "KendallTau": float(kendall_tau) if pd.notna(kendall_tau) else np.nan,
+                    "KendallP": float(kendall_p) if pd.notna(kendall_p) else np.nan,
+                }
+            )
+
+        corr_df = pd.DataFrame(rows).sort_values(
+            by=["Dataset", "Lineage", "Algorithm", "Seed"],
+            na_position="last",
+        ).reset_index(drop=True)
+        self.degree_rank_results = corr_df
+
+        self.console.print(
+            f"✅ Degree-rank correlation complete. rows={len(corr_df)}, "
+            f"missing_gt={n_missing_gt}, skipped={n_skipped}"
+        )
+
+        if plot_heatmap and not corr_df.empty:
+            self.plot_degree_rank_correlation_heatmap(
+                corr_df=corr_df,
+                metric=heatmap_metric,
+                save=save_heatmap,
+            )
+        return corr_df
+
+    def plot_degree_rank_correlation_heatmap(
+        self,
+        corr_df: Optional[pd.DataFrame] = None,
+        metric: str = "SpearmanR",
+        save: Optional[str] = None,
+        aggfunc: str = "mean",
+    ):
+        """
+        Plot method x lineage heatmap for degree rank correlations.
+        One figure is generated per dataset.
+        """
+        if corr_df is None:
+            corr_df = self.degree_rank_results
+        if corr_df is None or corr_df.empty:
+            self.console.print("[yellow]No degree-rank results available for plotting.[/]")
+            return
+        if metric not in {"SpearmanR", "KendallTau"}:
+            raise ValueError("metric must be 'SpearmanR' or 'KendallTau'.")
+
+        sns.set_style("whitegrid")
+        for dataset, df_ds in corr_df.groupby("Dataset"):
+            summary = (
+                df_ds.groupby(["Algorithm", "Lineage"], as_index=False)[metric]
+                .agg(aggfunc)
+            )
+            if summary.empty:
+                continue
+            mat = summary.pivot(index="Algorithm", columns="Lineage", values=metric)
+            if mat.empty:
+                continue
+
+            fig_h = max(3.5, 0.45 * len(mat.index) + 1.2)
+            fig_w = max(4.0, 0.8 * len(mat.columns) + 1.5)
+            fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+            sns.heatmap(
+                mat,
+                cmap="vlag",
+                vmin=-1,
+                vmax=1,
+                annot=True,
+                fmt=".2f",
+                linewidths=0.5,
+                linecolor="white",
+                cbar_kws={"label": metric},
+                ax=ax,
+            )
+            ax.set_title(f"Degree Rank Correlation ({metric}) - {dataset}")
+            ax.set_xlabel("Lineage")
+            ax.set_ylabel("Algorithm")
+            plt.tight_layout()
+            plt.show()
+
+            if save:
+                if save.endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".pdf", ".svg")):
+                    filename = save if len(corr_df["Dataset"].unique()) == 1 else f"{os.path.splitext(save)[0]}_{dataset}{os.path.splitext(save)[1]}"
+                else:
+                    filename = f"{save}_{dataset}.pdf"
+                fig.savefig(filename, dpi=300, bbox_inches="tight")
+                self.console.print(f"[green]Saved degree-rank heatmap:[/] {filename}")
 
     def calculate_tf_recovery(
         self,

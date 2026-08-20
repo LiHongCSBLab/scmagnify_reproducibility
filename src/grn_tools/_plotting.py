@@ -1,10 +1,14 @@
 import os
 import sys
+from contextlib import nullcontext
 
 import numpy as np
 import pandas as pd
 
-import mplscience
+try:
+    import mplscience
+except ImportError:
+    mplscience = None
 import matplotlib.pyplot as plt
 import seaborn as sns
 import seaborn as sns
@@ -15,6 +19,10 @@ from typing import List, Optional
 
 __all__ = ["show_color", "plot_metrics", "plot_precision_recall", "plot_overlaps", "plot_pie_charts", "plot_violin", "plot_boxplot", "plot_paired_boxplot", "plot_horizontal_boxplot", "plot_metric_summary", "plot_line", "show_color_dict", "get_tab20_colors_dict", "quartile_to_level", "get_kde", "flatten_dict_values", "plot_scatter_with_error_bars"]
 
+def _style_context():
+    """Use mplscience styling when available, otherwise fall back to defaults."""
+    return mplscience.style_context() if mplscience is not None else nullcontext()
+
 def plot_metrics(dfs, algo_list):
     
     dfs = {metric: dfs[metric].loc[dfs[metric].Algorithm.isin(algo_list) & dfs[metric].Lineage.isin(lin_list)] for metric in dfs.keys()}
@@ -24,7 +32,7 @@ def plot_metrics(dfs, algo_list):
     # palette = dict(zip(algo_list, sns.color_palette("colorblind").as_hex()[:n_algo]))
     palette = dict(zip(algo_list, [f"C{i}" for i in range(n_algo)]))
 
-    with mplscience.style_context():
+    with _style_context():
         fig, ax = plt.subplots(figsize=(10 * n_metrics, 6), ncols=n_metrics)
 
         for ax_id, metric in enumerate(dfs.keys()):
@@ -64,7 +72,7 @@ def plot_precision_recall(dfs, algo_list, lin_list):
 
     palette = dict(zip(algo_list, sns.color_palette("colorblind").as_hex()[:n_algo]))
 
-    with mplscience.style_context():
+    with _style_context():
         sns.set_style("whitegrid")
 
         fig, ax = plt.subplots(figsize=(6 * n_lin, 4), ncols=n_lin)

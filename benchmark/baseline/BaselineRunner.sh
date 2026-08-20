@@ -9,7 +9,7 @@
 # Usage:
 #   bash BaselineRunner.sh [--preflight] <path_to_config_file>
 # Optional env:
-#   TIME_BIN   - path to /usr/bin/time (default: /usr/bin/time)
+#   TIME_BIN   - explicit path/name for GNU time (auto-detected when unset)
 #   CONDA_EXE  - if set, used to locate conda base (install root) when conda is not on PATH
 #   BASELINE_PREFLIGHT_ENV - optional conda env used to run workflow/run_preflight.py
 
@@ -66,11 +66,37 @@ if ! command -v yq >/dev/null 2>&1; then
     exit 1
 fi
 
-TIME_BIN="${TIME_BIN:-/usr/bin/time}"
-if [[ ! -x "$TIME_BIN" ]]; then
-    echo "Profiler binary not found or not executable: $TIME_BIN" >&2
+resolve_time_bin() {
+    local candidate=""
+
+    if [[ -n "${TIME_BIN:-}" ]]; then
+        candidate="$TIME_BIN"
+        if [[ "$candidate" == */* ]]; then
+            [[ -x "$candidate" ]] && { printf '%s\n' "$candidate"; return 0; }
+        elif command -v "$candidate" >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+        echo "TIME_BIN is set but not executable/found: $candidate" >&2
+        return 1
+    fi
+
+    for candidate in /usr/bin/time /bin/time time; do
+        if [[ "$candidate" == */* ]]; then
+            [[ -x "$candidate" ]] && { printf '%s\n' "$candidate"; return 0; }
+        elif command -v "$candidate" >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+TIME_BIN="$(resolve_time_bin)" || {
+    echo "Profiler binary not found. Install GNU time or set TIME_BIN explicitly." >&2
     exit 1
-fi
+}
 
 CONDA_BASE="$(baseline_runner_conda_base)" || {
     echo "conda not found: set CONDA_EXE or add conda to PATH" >&2
